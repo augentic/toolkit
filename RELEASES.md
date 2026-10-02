@@ -1,3 +1,36 @@
+## 0.3.0
+
+This repository is now `augentic/toolkit`, moved from `augentic/.github` with
+its history and tags; `augentic/.github` keeps the organisation profile and
+the default community health files. A consumer re-pins every
+`uses: augentic/.github/...@v0.2.0` and the mise `?ref=` to
+`augentic/toolkit` at this tag.
+
+### Conventions
+
+- The `conventions/` tree and the `conventions` program
+  (`crates/conventions`): the files every consumer carries, in five modes
+  (whole file, marker block, TOML table block, rendered stub, pin rewrite),
+  written by `make conventions-sync` and held by `make conventions-check`.
+  See the README's [Conventions](README.md#conventions).
+
+### Added
+
+- A Rust workspace at the root for `crates/conventions`, with this
+  repository's own `self-ci.yaml` calling the reusable `ci.yaml` at the
+  commit under test.
+- `LICENSE-MIT` and `LICENSE-APACHE`: the repository is licensed as the
+  consumers are, MIT OR Apache-2.0.
+
+### Changed
+
+- `mise/rust.toml`: `test-docs` mirrors the CI `test-doc` job's library
+  detection and runs nothing in a workspace without a library target, where
+  `cargo test --doc` fails instead.
+- README rewritten for the new repository: consumer configuration now covers
+  `conventions.toml` and the sync and check tasks, and the mirror table gains
+  the `conventions` job.
+
 ## 0.2.0
 
 ### Added

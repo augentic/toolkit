@@ -123,10 +123,21 @@ description = "Build rustdoc for the workspace, failing on warnings"
 env = { RUSTFLAGS = "-Dwarnings", RUSTDOCFLAGS = "-Dwarnings" }
 run = "cargo doc --no-deps --workspace --all-features --locked"
 
+# Mirrors the CI `test-doc` job, lib detection included: `cargo test --doc`
+# errors on a workspace with no library target instead of testing nothing.
 [test-docs]
-description = "Run doc tests"
+description = "Run doc tests (nothing to run in a workspace without a library target)"
 env = { RUSTFLAGS = "-Dwarnings" }
-run = "cargo test --doc --all-features --workspace --locked"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+if cargo metadata --format-version 1 --no-deps \
+  | grep -Eq '"kind":\[[^]]*"(lib|rlib|cdylib|dylib|staticlib|proc-macro)"'; then
+  cargo test --doc --all-features --workspace --locked
+else
+  echo "no library target in the workspace; no doc tests to run"
+fi
+'''
 
 # Check-only, like the CI `vet` job. `vet-regen` refreshes the supply-chain
 # files first.

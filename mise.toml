@@ -1,0 +1,15 @@
+# Install: https://mise.jdx.dev
+# Run: `mise run <task>` (the root Makefile forwards `make <task>` here)
+#
+# This repository runs the shared Rust tasks it publishes, from the working
+# tree rather than a tag, so a change to `mise/rust.toml` is exercised here
+# before a consumer pins it.
+
+[task_config]
+includes = ["mise/rust.toml"]
+
+# Shadows the shared `lint-wasm`: this workspace is a native program alone, so
+# the wasm32-wasip2 clippy pass has nothing to lint.
+[tasks.lint-wasm]
+description = "Nothing to lint for wasm32-wasip2 in this workspace"
+run = "true"
