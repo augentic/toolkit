@@ -1,0 +1,130 @@
+# Every file `conventions sync` manages in a consumer, by mode. A `source` is
+# a path under this directory; a `target` a path under the consumer root, with
+# `{{key}}` placeholders read from the consumer's conventions.toml (a
+# list-valued key makes one target per entry, none when the list is empty).
+#
+# A block's name is its source path without the extension; a block-mode file
+# the consumer lacks is created as `preamble` plus the blocks.
+
+# -------------------------------------
+# Whole files: written verbatim, under a managed header where the format takes
+# comments (`hash` for `#`, `html` for `<!-- -->`, `none`).
+# -------------------------------------
+
+[[whole]]
+source = "rustfmt.toml"
+target = "rustfmt.toml"
+header = "hash"
+
+[[whole]]
+source = "taplo.toml"
+target = "taplo.toml"
+header = "hash"
+
+[[whole]]
+source = "Makefile"
+target = "Makefile"
+header = "hash"
+
+[[whole]]
+source = "LICENSE-MIT"
+target = "LICENSE-MIT"
+header = "none"
+
+[[whole]]
+source = "LICENSE-APACHE"
+target = "LICENSE-APACHE"
+header = "none"
+
+[[whole]]
+source = "CODE_OF_CONDUCT.md"
+target = "CODE_OF_CONDUCT.md"
+header = "html"
+
+[[whole]]
+source = "GOVERNANCE.md"
+target = "GOVERNANCE.md"
+header = "html"
+
+[[whole]]
+source = "renovate.json"
+target = "renovate.json"
+header = "none"
+
+# -------------------------------------
+# Marker blocks inside files the consumer owns.
+# -------------------------------------
+
+[[block]]
+target = "AGENTS.md"
+preamble = "# {{name}} — Agent Instructions\n"
+sources = [
+  "agents/git.md",
+  "agents/code-style.md",
+  "agents/comments.md",
+  "agents/testing.md",
+  "agents/commands.md",
+]
+
+[[block]]
+target = "CONTRIBUTING.md"
+preamble = "# Contributing\n"
+sources = [
+  "contributing/dco.md",
+  "contributing/pull-requests.md",
+  "contributing/conduct.md",
+]
+
+[[block]]
+target = ".gitignore"
+sources = ["gitignore/head"]
+
+[[block]]
+target = ".github/dependabot.yml"
+preamble = "version: 2\nupdates:\n"
+sources = ["dependabot/actions.yml"]
+
+# -------------------------------------
+# TOML table blocks: complete tables, or the leading keys of one table whose
+# remaining keys the consumer writes beneath the end marker.
+# -------------------------------------
+
+[[table]]
+target = "Cargo.toml"
+sources = ["lints/rust.toml", "lints/clippy.toml"]
+
+[[table]]
+target = "deny.toml"
+sources = ["deny/advisories.toml", "deny/licenses.toml"]
+
+[[table]]
+target = "supply-chain/config.toml"
+sources = ["vet/imports.toml"]
+
+[[table]]
+target = "{{guest-clippy}}"
+sources = ["clippy/guest-deny-list.toml"]
+
+# -------------------------------------
+# Stubs rendered from a template and conventions.toml, managed whole.
+# -------------------------------------
+
+[[stub]]
+source = "workflows/ci.yaml"
+target = ".github/workflows/ci.yaml"
+
+[[stub]]
+source = "workflows/audit.yaml"
+target = ".github/workflows/audit.yaml"
+
+[[stub]]
+source = "workflows/patch.yaml"
+target = ".github/workflows/patch.yaml"
+
+[[stub]]
+source = "workflows/release.yaml"
+target = ".github/workflows/release.yaml"
+
+[[stub]]
+source = "rust-toolchain.toml"
+target = "rust-toolchain.toml"
