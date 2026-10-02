@@ -1,0 +1,17 @@
+[package]
+name = "conventions"
+description = "Writes and checks Augentic's shared conventions in a consuming repository"
+categories = ["development-tools"]
+keywords = ["conventions", "sync", "toolkit"]
+readme = "README.md"
+publish = false
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[lints]
+workspace = true
