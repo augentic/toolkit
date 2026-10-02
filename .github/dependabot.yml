@@ -1,5 +1,5 @@
-# Keep GitHub Actions used by the reusable workflows and composite actions
-# up to date.
+# Keep GitHub Actions used by the reusable workflows and composite actions,
+# and the conventions program's crates, up to date.
 version: 2
 updates:
   - package-ecosystem: github-actions
@@ -10,5 +10,13 @@ updates:
       interval: weekly
     groups:
       actions:
+        patterns:
+          - "*"
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      cargo:
         patterns:
           - "*"

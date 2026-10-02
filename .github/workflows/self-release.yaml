@@ -54,6 +54,21 @@ jobs:
             echo "tag=v$version"
           } >> "$GITHUB_OUTPUT"
 
+      # The conventions program reports its crate version as the toolkit pin it
+      # was built from, so the crate must carry the version being released.
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check the crate version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          crate=$(cargo metadata --no-deps --format-version 1 \
+            | jq -r '.packages[] | select(.name == "conventions") | .version')
+          if [ "$crate" != "$VERSION" ]; then
+            echo "::error file=Cargo.toml::crates/conventions is version $crate but RELEASES.md line 1 says $VERSION; set [workspace.package] version to $VERSION"
+            exit 1
+          fi
+
       # The section under line 1 up to the next `## ` heading (or EOF), with
       # leading and trailing blank lines removed. An empty section fails the
       # run so notes are written before, not after, a release.

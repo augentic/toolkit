@@ -97,9 +97,12 @@ sources = ["lints/rust.toml", "lints/clippy.toml"]
 target = "deny.toml"
 sources = ["deny/advisories.toml", "deny/licenses.toml"]
 
+# `cargo vet` rewrites this file in its own layout and would drop the markers,
+# so the imports are held as keys alone.
 [[table]]
 target = "supply-chain/config.toml"
 sources = ["vet/imports.toml"]
+markers = false
 
 [[table]]
 target = "{{guest-clippy}}"
