@@ -254,4 +254,4 @@ jobs:
         run: cargo install --locked --path .augentic/crates/conventions --target-dir .augentic/target --root "$RUNNER_TEMP/toolkit"
       - if: steps.config.outputs.present == 'true'
         working-directory: ${{ inputs.working-directory }}
-        run: "$RUNNER_TEMP/toolkit/bin/conventions" check
+        run: '"$RUNNER_TEMP/toolkit/bin/conventions" check'
