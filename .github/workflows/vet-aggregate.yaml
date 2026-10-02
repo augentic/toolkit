@@ -1,0 +1,64 @@
+# Rebuilds the organisation's aggregated cargo-vet audits.
+# `supply-chain/augentic/sources.list` names every consumer's `audits.toml`
+# and this repository's own; `cargo vet aggregate` merges them into
+# `supply-chain/augentic/audits.toml`, which every consumer imports as
+# `[imports.augentic]`. A change opens a pull request under the App token,
+# so `main` stays behind review and the pull request runs CI.
+
+name: Aggregate audits
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency: vet-aggregate
+
+jobs:
+  aggregate:
+    name: Aggregate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-binstall
+
+      # Matches the version `ci.yaml` vets with.
+      - run: cargo binstall --no-confirm cargo-vet@0.10.2
+
+      - name: Aggregate
+        run: |
+          set -euo pipefail
+          cargo vet aggregate supply-chain/augentic/sources.list > supply-chain/augentic/audits.toml
+          git diff --stat -- supply-chain/augentic/audits.toml
+
+      - name: GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          # `app-id` is deprecated; the numeric App ID is accepted as the
+          # `client-id` (both are valid JWT issuers), so no new secret needed.
+          client-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      # No change leaves no pull request; a change updates the open one.
+      - uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          branch: ci/vet-aggregate
+          commit-message: Aggregate the organisation's audits
+          sign-commits: true
+          title: Aggregate the organisation's audits
+          body: |
+            `cargo vet aggregate` over `supply-chain/augentic/sources.list`,
+            run by the scheduled `vet-aggregate.yaml`. Every consumer imports
+            the result as `[imports.augentic]`.
+          add-paths: supply-chain/augentic/audits.toml
+          delete-branch: true

@@ -268,10 +268,18 @@ names the `audits.toml` of every consumer and of this repository's own
 workspace; the scheduled `vet-aggregate.yaml` runs `cargo vet aggregate` over
 it and opens a pull request with the result at
 `supply-chain/augentic/audits.toml`, the pattern cargo-vet documents for
-multiple repositories. The `[[trusted.*]]` publisher entries each repository
-once renewed alone are renewed here, in
-[`supply-chain/audits.toml`](supply-chain/audits.toml), and reach every
-consumer through the aggregate.
+multiple repositories. An audit certified in one repository
+(`cargo vet certify`, a wildcard audit) reaches every other through the
+aggregate.
+
+`[[trusted.*]]` publisher entries do not travel: cargo-vet imports audits and
+wildcard audits, never another store's trust decisions, so each repository
+keeps its own. This repository's
+[`supply-chain/audits.toml`](supply-chain/audits.toml) carries the union of
+the organisation's trusted publishers as the reference a repository copies an
+entry from when it adds a dependency, and the aggregate shows them beside the
+audits; renew expiring entries in each repository (`end` a year on) rather
+than here.
 
 ## Required secrets
 

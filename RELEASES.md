@@ -54,6 +54,14 @@ the default community health files. A consumer re-pins every
 - `self-release.yaml` refuses a release whose `crates/conventions` version is
   not the one on line 1 of `RELEASES.md`, since the program reports that
   version as the pin it was built from.
+- The organisation's aggregated cargo-vet audits at
+  `supply-chain/augentic/audits.toml`, rebuilt weekly by `vet-aggregate.yaml`
+  from the `audits.toml` of every consumer and of this repository
+  (`supply-chain/augentic/sources.list`) and imported by every consumer as
+  `[imports.augentic]`. cargo-vet does not import `[[trusted.*]]` entries, so
+  each repository keeps its own; this repository's `supply-chain/audits.toml`
+  holds the union of the organisation's trusted publishers as the reference
+  to copy from, renewed to October 2027.
 - `LICENSE-MIT` and `LICENSE-APACHE`: the repository is licensed as the
   consumers are, MIT OR Apache-2.0.
 
