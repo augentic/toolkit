@@ -13,5 +13,16 @@ repository.workspace = true
 rust-version.workspace = true
 version.workspace = true
 
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+include_dir.workspace = true
+serde.workspace = true
+similar.workspace = true
+toml_edit.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
 [lints]
 workspace = true

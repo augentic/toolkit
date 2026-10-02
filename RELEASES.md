@@ -28,9 +28,10 @@ the default community health files. A consumer re-pins every
   `unsafe_code = "deny"` org-wide, `[workspace.lints.clippy]` with the lint
   groups at `priority = -1` and the restriction picks, `[licenses] allow`
   as the union of every repository's allowlist (`BSL-1.0` and `CC0-1.0`
-  join), `[advisories]`, the seven `[imports.*]` of `supply-chain/config.toml`
-  (`augentic` among them), and the guest deny-list (`disallowed-methods`,
-  `disallowed-types`) in each `clippy.toml` that `guest-clippy` names.
+  join), `[advisories]`, and the guest deny-list (`disallowed-methods`,
+  `disallowed-types`) in each `clippy.toml` that `guest-clippy` names. The
+  seven `[imports.*]` of `supply-chain/config.toml` (`augentic` among them)
+  are held as keys without markers, since `cargo vet` rewrites that file.
 - Stubs: the `ci.yaml`, `audit.yaml`, `patch.yaml`, and `release.yaml`
   callers (one concurrency shape; `release.yaml` takes an `increment` choice)
   and `rust-toolchain.toml` (`targets` from `conventions.toml`; the host
@@ -42,6 +43,17 @@ the default community health files. A consumer re-pins every
 - A Rust workspace at the root for `crates/conventions`, with this
   repository's own `self-ci.yaml` calling the reusable `ci.yaml` at the
   commit under test.
+- `ci.yaml` gains a `conventions` job: it builds the program from the toolkit
+  revision the caller's `uses:` names and runs `conventions check`, so a
+  drifted file or a pin out of step with the `uses:` fails CI. A repository
+  without `conventions.toml` passes with a notice.
+- `mise/rust.toml` gains `conventions-sync` and `conventions-check`, which
+  build the program once per pin from the `?ref=` tag into `target/toolkit/`
+  (`CONVENTIONS_TOOLKIT=<checkout>` runs a checkout instead), and `ci` and
+  `check` end with `conventions-check`.
+- `self-release.yaml` refuses a release whose `crates/conventions` version is
+  not the one on line 1 of `RELEASES.md`, since the program reports that
+  version as the pin it was built from.
 - `LICENSE-MIT` and `LICENSE-APACHE`: the repository is licensed as the
   consumers are, MIT OR Apache-2.0.
 

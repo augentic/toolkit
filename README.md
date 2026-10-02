@@ -137,7 +137,7 @@ hand. When you change one, change the other in the same PR.
 | Docs | `docs` | `cargo doc --no-deps --workspace --all-features --locked` with `RUSTDOCFLAGS=-Dwarnings` |
 | Vet | `vet` | `cargo vet --locked` |
 | Deny | `deny` | `cargo deny --workspace check` |
-| Conventions | `conventions-check` | `conventions check`, built from the pinned tag |
+| Conventions | `conventions-check` | `conventions check`, the program built from the toolkit revision in use: CI's `job.workflow_sha`, mise's `?ref=` tag |
 
 All clippy/test/doc steps run with `RUSTFLAGS=-Dwarnings` (workflow-global
 `env`; per-task `env` in mise). `mise run ci` runs the tasks in the table
@@ -164,7 +164,7 @@ and the reusable `ci.yaml` do.
 |---|---|---|
 | whole | `rustfmt.toml`, `taplo.toml`, `Makefile`, `LICENSE-MIT`, `LICENSE-APACHE`, `CODE_OF_CONDUCT.md`, `GOVERNANCE.md`, `renovate.json` | Written verbatim from the tree, with a one-line managed header where the format takes comments (the licences and `renovate.json` carry none). A local edit fails `check`; change the tree instead. |
 | block | `AGENTS.md`, `CONTRIBUTING.md`, `.gitignore`, `.github/dependabot.yml` | A shared region between [markers](#markers) inside a file the repository owns; the repository's own text sits around it. |
-| table | `Cargo.toml`, `deny.toml`, `supply-chain/config.toml`, each `guest-clippy` file | A block of TOML between hash markers: complete tables (`[imports.*]`), or the leading keys of one table (`[workspace.lints.rust]`, `[licenses]`) with the repository's keys of that table following the end marker. TOML cannot reopen a table, so the repository's keys must follow the block, never precede it. |
+| table | `Cargo.toml`, `deny.toml`, each `guest-clippy` file; `supply-chain/config.toml` without markers | A block of TOML between hash markers: complete tables, or the leading keys of one table (`[workspace.lints.rust]`, `[licenses]`) with the repository's keys of that table following the end marker. TOML cannot reopen a table, so the repository's keys must follow the block, never precede it. With `markers = false`, for a file another tool rewrites in its own layout (`cargo vet` owns `supply-chain/config.toml`), the keys the block sets (`[imports.*]`) must hold its values and nothing else about the file is held. |
 | stub | `.github/workflows/{ci,audit,patch,release}.yaml`, `rust-toolchain.toml` | Rendered from a template in the tree and the repository's `conventions.toml`; the whole file is managed. |
 | pin | every other `.github/workflows/*.yaml`, plus the `pinned` files of `conventions.toml` | Repository-owned; only the `@vX.Y.Z` of each `uses: augentic/toolkit/...` reference is managed. `sync` rewrites it to the pin, `check` compares. |
 
@@ -193,12 +193,13 @@ name is the block's path under `conventions/` without its extension.
 `sync` replaces what sits between a pair. A block the file lacks is appended
 at the end, in manifest order; a block-mode file the repository lacks is
 created with a heading and the blocks. A TOML block the file lacks is merged:
-a table the block declares that the file already has is taken over at its
-position, the keys the block sets are removed from the file's copy, and the
-file's remaining keys of that table follow the end marker; a block whose tables
-the file lacks is appended, or placed before the first table when it holds
-root keys. `check` verifies content and presence, never position, so a block
-may be moved by hand.
+the first table the block declares is taken over at its position in the file,
+the keys the block sets are removed from the file's copy, and the file's
+remaining keys of that table follow the end marker; every other table the
+block declares must carry nothing the block does not, and is replaced; a block
+whose tables the file lacks is appended, or placed before the first table when
+it holds root keys. `check` verifies content and presence, never position, so
+a block may be moved by hand.
 
 ### `conventions.toml`
 
@@ -243,8 +244,14 @@ cargo run -p conventions -- check --toolkit . --root ../emery
 
 `--toolkit <dir>` reads `<dir>/conventions` instead of the embedded copy and
 takes the program's own version as the pin, so the consumer's `mise.toml` need
-not point anywhere yet. The crate's tests run `sync` then `check` over a
-fixture consumer and fail each class of local drift.
+not point anywhere yet. From the consumer's side, `CONVENTIONS_TOOLKIT=../toolkit
+make conventions-sync` runs the same thing through the mise task. The crate's
+tests run `sync` then `check` over a fixture consumer and fail each class of
+local drift.
+
+A repository without `conventions.toml` has no conventions to sync or check:
+the tasks and the CI job say so and pass, which is how this repository's own
+CI and a freshly scaffolded guest run before they adopt the tree.
 
 ## Supply chain
 
