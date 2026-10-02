@@ -13,6 +13,29 @@ the default community health files. A consumer re-pins every
   (whole file, marker block, TOML table block, rendered stub, pin rewrite),
   written by `make conventions-sync` and held by `make conventions-check`.
   See the README's [Conventions](README.md#conventions).
+- Whole files: `rustfmt.toml`, `taplo.toml` (without the commented-out rules
+  three repositories carried), `Makefile`, `LICENSE-MIT`, `LICENSE-APACHE`,
+  `CODE_OF_CONDUCT.md` (the spelling GitHub recognises; the first sync
+  renames `CODE-OF-CONDUCT.md`), `GOVERNANCE.md`, and `renovate.json`, which
+  bumps the toolkit pin as one grouped pull request over every `uses:` and
+  the mise `?ref=`.
+- Blocks: `AGENTS.md` (Git, code style, comments, testing, commands),
+  `CONTRIBUTING.md` (DCO, pull request procedure, conduct), the `.gitignore`
+  head, and the Dependabot `github-actions` entry, now ignoring `augentic/*`.
+  The Git rule reads "unless the maintainer lifts this for the session" and
+  covers any sibling checkout.
+- TOML tables: `[workspace.lints.rust]` with `missing_docs = "warn"` and
+  `unsafe_code = "deny"` org-wide, `[workspace.lints.clippy]` with the lint
+  groups at `priority = -1` and the restriction picks, `[licenses] allow`
+  as the union of every repository's allowlist (`BSL-1.0` and `CC0-1.0`
+  join), `[advisories]`, the seven `[imports.*]` of `supply-chain/config.toml`
+  (`augentic` among them), and the guest deny-list (`disallowed-methods`,
+  `disallowed-types`) in each `clippy.toml` that `guest-clippy` names.
+- Stubs: the `ci.yaml`, `audit.yaml`, `patch.yaml`, and `release.yaml`
+  callers (one concurrency shape; `release.yaml` takes an `increment` choice)
+  and `rust-toolchain.toml` (`targets` from `conventions.toml`; the host
+  target four repositories listed is dropped, since every command runs on the
+  host anyway).
 
 ### Added
 

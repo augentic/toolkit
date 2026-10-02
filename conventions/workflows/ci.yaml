@@ -1,0 +1,19 @@
+name: CI
+
+on:
+  push:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: augentic/toolkit/.github/workflows/ci.yaml@{{version}}
+    secrets: inherit
+    with:
+      targets: {{targets}}
+      wasm-packages: {{wasm-packages}}
