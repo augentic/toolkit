@@ -41,5 +41,7 @@ Report every skipped pull request with its reason. Never drop one silently.
 ## Uncertainty
 
 When the category or the user-visible effect is unclear from the title, the
-body, and the diff, mark the entry uncertain and say why, so a maintainer
-reviews it before the release is published.
+body, and the diff, do not guess: put the entry among the uncertain entries
+of the answer (`uncertainEntries`), with the reason. Those are listed under
+`### Needs Review`, which a maintainer resolves before the release is
+published; an entry under a category heading is taken as settled.
