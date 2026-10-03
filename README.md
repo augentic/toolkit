@@ -1,9 +1,8 @@
 # Toolkit
 
-The shared engineering conventions of Augentic's Rust repositories: reusable
-GitHub workflows, composite actions, mise tasks, and the `conventions/` tree a
-repository syncs into its own files. Consumers pin one release tag
-(`@vX.Y.Z`) rather than `@main`; see [Versioning](#versioning).
+The shared engineering toolkit of Augentic's Rust repositories: reusable
+GitHub workflows, composite actions, and mise tasks. Consumers pin one release
+tag (`@vX.Y.Z`) rather than `@main`; see [Versioning](#versioning).
 
 Formerly `augentic/.github`, which now holds the organisation profile and
 default community health files alone. Tags up to `v0.2.0` resolve from both
@@ -16,8 +15,8 @@ While on `0.x`, a **minor** bump signals a breaking change (renamed inputs,
 changed behaviour, removed workflows, a convention a consumer must act on) and
 a **patch** bump is a fix. Release notes live in [RELEASES.md](RELEASES.md).
 
-A consumer carries the tag in two places, and `conventions check` holds every
-`uses:` to the mise `?ref=`:
+A consumer carries the tag in two places, every `uses:` and the mise `?ref=`,
+and bumps them together:
 
 ```yaml
 jobs:
@@ -34,21 +33,15 @@ includes = ["git::https://github.com/augentic/toolkit.git//mise/rust.toml?ref=v0
 Because `release.yaml`, `publish.yaml` and `patch.yaml` resolve their
 composite actions at their own commit (see
 [Composite actions in reusable workflows](#composite-actions-in-reusable-workflows)),
-and the `conventions` program is built from the pinned tag, pinning the tag
-pins everything it runs and everything it writes.
-
-[Renovate](https://docs.renovatebot.com) bumps the pin: the synced
-`renovate.json` groups the `uses:` tags and the `?ref=` into one pull request.
-Dependabot's `github-actions` entry stays for the third-party actions a
-repository's own workflows use and ignores `augentic/*`.
+pinning the tag pins everything it runs.
 
 `@main` still works for trying unreleased changes but is not the supported
 reference: it can change under a consumer at any time.
 
 ## Consumer configuration
 
-A Rust repository adopts the shared tasks, CI and conventions with its
-`mise.toml`, the synced `Makefile`, and its own caller workflows:
+A Rust repository adopts the shared tasks and CI with its `mise.toml`, a
+`Makefile` forwarding to mise, and its own caller workflows:
 
 ```toml
 # mise.toml — the one pin, plus the knobs the shared tasks read and any
@@ -66,8 +59,19 @@ OUTDATED_IGNORE = "cap-std,cap-primitives"
 ```
 
 ```makefile
-# Makefile — synced from the tree: forwards `make <task>` to `mise run <task>`
-# and never installs mise itself
+# Makefile — forwards `make <task> [args]` to `mise run <task> -- [args]`;
+# mise is never installed implicitly, see https://mise.jdx.dev/getting-started.html
+MISE := $(shell command -v mise 2>/dev/null)
+
+.PHONY: %
+%:
+	@if [ "$@" = "$(firstword $(MAKECMDGOALS))" ]; then \
+		if [ -z "$(MISE)" ]; then \
+			echo "mise not found on PATH; install it first: https://mise.jdx.dev/getting-started.html" >&2; \
+			exit 1; \
+		fi; \
+		"$(MISE)" run "$@" -- $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS)); \
+	fi
 ```
 
 ```yaml
@@ -89,10 +93,9 @@ jobs:
 
 `audit.yaml`, `patch.yaml`, `release.yaml` and `publish.yaml` take the same
 shape, each calling its reusable workflow with the inputs the repository
-chooses. Then `make conventions-sync` writes every managed file (see
-[Conventions](#conventions)). `make ci` runs the same checks as the workflow,
-`conventions-check` among them; `make check` adds the local-only advisories
-(`audit`, `outdated`, `deps`) and rewrites formatting in place.
+chooses. `make ci` runs the same checks as the workflow; `make check` adds the
+local-only advisories (`audit`, `outdated`, `deps`) and rewrites formatting in
+place.
 
 ### The wasm32 lint pass
 
@@ -128,8 +131,13 @@ The pass has one shape everywhere:
   that already gate them with `#![cfg(not(target_arch = "wasm32"))]` lose
   nothing.
 
-A workspace with no wasm32 target shadows `lint-wasm` with a local no-op task,
-as this repository's own [mise.toml](mise.toml) does.
+A workspace with no wasm32 target shadows `lint-wasm` with a local no-op task:
+
+```toml
+[tasks.lint-wasm]
+description = "Nothing to lint for wasm32-wasip2 in this workspace"
+run = "true"
+```
 
 ### Mirror: `ci.yaml` jobs and `mise/rust.toml` tasks
 
@@ -146,132 +154,18 @@ hand. When you change one, change the other in the same PR.
 | Docs | `docs` | `cargo doc --no-deps --workspace --all-features --locked` with `RUSTDOCFLAGS=-Dwarnings` |
 | Vet | `vet` | `cargo vet --locked` |
 | Deny | `deny` | `cargo deny --workspace check` |
-| Conventions | `conventions-check` | `conventions check`, the program built from the toolkit revision in use: CI's `job.workflow_sha`, mise's `?ref=` tag |
 
 All clippy/test/doc steps run with `RUSTFLAGS=-Dwarnings` (workflow-global
 `env`; per-task `env` in mise). `mise run ci` runs the tasks in the table
 order; `lint` runs `lint-host` then `lint-wasm`. Tasks with no CI job
-(`audit`, `outdated`, `deps`, `fmt`, `vet-regen`, `conventions-sync`, `cov`,
-`publish`, `miri`, `clean`, `sweep`) are local helpers; `audit` and `outdated`
-correspond to the scheduled `audit.yaml` workflow instead.
-
-## Conventions
-
-[`conventions/`](conventions) is the tree of files every consumer carries and
-[`crates/conventions`](crates/conventions) the program that writes and checks
-them. [`conventions/manifest.toml`](conventions/manifest.toml) lists each
-managed file with its mode. The program embeds the tree of the release it is
-built from, so the conventions a repository carries are those of its pinned
-toolkit version; `make conventions-sync` builds it from the tag the `mise.toml`
-pin names (into `target/toolkit/`, never committed) and runs `conventions sync`;
-`make conventions-check` runs `conventions check` the same way, as `make ci`
-and the reusable `ci.yaml` do.
-
-### Modes
-
-| Mode | Files | Ownership |
-|---|---|---|
-| whole | `rustfmt.toml`, `taplo.toml`, `Makefile`, `LICENSE-MIT`, `LICENSE-APACHE`, `CODE_OF_CONDUCT.md`, `GOVERNANCE.md`, `renovate.json` | Written verbatim from the tree, opening with the two-line [managed notice](#the-managed-notice) where the format takes comments (the licences and `renovate.json` carry none). A local edit fails `check`; change the tree instead. |
-| block | `AGENTS.md`, `CONTRIBUTING.md`, `.gitignore`, `.github/dependabot.yml` | A shared region inside a file the repository owns, from a `BEGIN Managed by augentic/toolkit` line to its `END` line; the repository's own text sits around it. |
-| table | `Cargo.toml`, `deny.toml`, `supply-chain/config.toml`, `rust-toolchain.toml` | Shared TOML tables owned by key: every key the tree sets (`[workspace.lints.rust]`, `[licenses] allow`, `[imports.*]`, `[toolchain] channel` and `components`) holds the tree's value, wherever the file keeps it, and every other key of the file (`[toolchain] targets` among them) is the repository's and never moves. A key the file lacks is added beside the shared keys, with its comment from the tree; a key the manifest lists as `retired` is removed. No notice is written into the file; `sync` and `check` print the repository's own keys of each shared table. |
-| pin | every `.github/workflows/*.yaml` | Repository-owned; only the `@vX.Y.Z` of each `uses: augentic/toolkit/...` reference is managed. `sync` rewrites it to the pin, `check` compares. |
-
-Everything else is the repository's: `mise.toml` (the pin line apart), the
-callers' `with:` inputs, `clippy.toml`, `.vscode/`, `.cargo/`, the vet store
-beyond its imports.
-
-### The managed notice
-
-One phrase names everything the toolkit writes: `Managed by augentic/toolkit`,
-followed by the path of the source in this repository, then the instruction
-on its own line. A whole file opens with the two lines and a blank line:
-
-```toml
-# Managed by augentic/toolkit: conventions/rustfmt.toml
-# Do not edit: run `make conventions-sync`.
-
-# https://github.com/rust-lang/rustfmt/blob/master/Configurations.md
-```
-
-A block carries the same two lines behind `BEGIN` and closes with `END` and
-the identifier repeated, so both edges of every block answer
-`rg "Managed by augentic/toolkit"` and the closing line stands on its own
-when a reader lands on it mid-file:
-
-```markdown
-<!-- BEGIN Managed by augentic/toolkit: conventions/agents/git.md -->
-<!-- Do not edit: run `make conventions-sync`. -->
-## Git
-...
-<!-- END Managed by augentic/toolkit: conventions/agents/git.md -->
-```
-
-```yaml
-# BEGIN Managed by augentic/toolkit: conventions/dependabot/actions.yml
-# Do not edit: run `make conventions-sync`.
-  - package-ecosystem: github-actions
-    ...
-# END Managed by augentic/toolkit: conventions/dependabot/actions.yml
-```
-
-Markdown takes the HTML form; YAML and `.gitignore` the hash form. The name
-is the block's source path, `conventions/agents/git.md`, so it is the file
-to open here.
-
-`sync` rewrites a block from its `BEGIN` line to its `END` line. A block the
-file lacks is appended at the end, in manifest order; a block-mode file the
-repository lacks is created with a heading and the blocks. `check` verifies
-content and presence, never position, so a block may be moved by hand. A pair
-written by 0.3.0 (`conventions:begin agents/git` / `conventions:end
-agents/git`, in TOML files too) is read for this release alone: the first
-`sync` respells a block's pair in place and drops the pair around a TOML
-table, whose keys are owned by value from then on. The one-line header 0.3.0
-wrote on `rust-toolchain.toml` and the four caller workflows it rendered is
-dropped the same way: those files are the repository's now, held by key and
-by pin.
-
-### What `check` enforces
-
-- Every managed file renders byte-equal to the tree; otherwise the unified
-  diff is printed and the exit code is 1.
-- Every `uses: augentic/toolkit/...@vX.Y.Z` equals the mise `?ref=vX.Y.Z`,
-  and the program's own version equals it (the tag it was built from).
-- Marker pairs are well-formed, uniquely named, and never nested.
-- Every key a shared TOML table sets holds the tree's value, a `retired` key
-  is gone, and the file parses as TOML; the repository's other keys are not
-  held.
-- `AGENTS.md` is at most 30 KiB and carries the shared blocks: agent loaders
-  cap what they read (Codex at 32 KiB across the chain), and the Git rule
-  must be inside the cap.
-- The code of conduct is spelled `CODE_OF_CONDUCT.md`, the one spelling
-  GitHub's community profile recognises.
-
-### Developing the tree
-
-This repository carries the conventions it publishes: its `mise.toml` sets
-`CONVENTIONS_TOOLKIT = "."`, so `make conventions-sync` and
-`make conventions-check` run the working tree's program over the root, and a
-change under `conventions/` re-syncs the root in the same commit (`make ci`
-says so when it is forgotten; its `conventions` job runs `check` here as in
-any consumer). A change is tried against a consumer checkout before it is
-tagged:
-
-```shell
-cargo run -p conventions -- sync --toolkit . --root ../emery
-cargo run -p conventions -- check --toolkit . --root ../emery
-```
-
-`--toolkit <dir>` reads `<dir>/conventions` instead of the embedded copy and
-takes the program's own version as the pin, so the consumer's `mise.toml` need
-not point anywhere yet. From the consumer's side, `CONVENTIONS_TOOLKIT=../toolkit
-make conventions-sync` runs the same thing through the mise task. The crate's
-tests run `sync` then `check` over a fixture consumer, migrate one 0.3.0 left,
-and fail each class of local drift.
+(`audit`, `outdated`, `deps`, `fmt`, `vet-regen`, `cov`, `publish`, `miri`,
+`clean`, `sweep`) are local helpers; `audit` and `outdated` correspond to the
+scheduled `audit.yaml` workflow instead.
 
 ## Supply chain
 
-Every consumer imports the same six upstream audit sets, and one more from
-this repository:
+Every consumer imports one audit set from this repository, beside the
+upstream ones:
 
 ```toml
 [imports.augentic]
@@ -279,8 +173,8 @@ url = "https://raw.githubusercontent.com/augentic/toolkit/main/supply-chain/auge
 ```
 
 [`supply-chain/augentic/sources.list`](supply-chain/augentic/sources.list)
-names the `audits.toml` of every consumer and of this repository's own
-workspace; the scheduled `vet-aggregate.yaml` runs `cargo vet aggregate` over
+names the `audits.toml` of every consumer and of this repository; the
+scheduled `vet-aggregate.yaml` runs `cargo vet aggregate` over
 it and opens a pull request with the result at
 `supply-chain/augentic/audits.toml`, the pattern cargo-vet documents for
 multiple repositories. An audit certified in one repository
@@ -428,11 +322,10 @@ publish failure fails the job immediately.
 | `AZURE_TENANT_ID` | yes | Azure tenant for the federated identity. |
 | `AZURE_SUBSCRIPTION_ID` | yes | Azure subscription containing the storage account and container app. |
 
-### `self-release.yaml`, `self-ci.yaml`
+### `self-release.yaml`
 
-Not reusable; they release and test this repository (see
-[Releasing this repository](#releasing-this-repository)). `self-ci.yaml` calls
-the reusable `ci.yaml` at the commit under test. No secrets beyond
+Not reusable; it releases this repository (see
+[Releasing this repository](#releasing-this-repository)). No secrets beyond
 `GITHUB_TOKEN`.
 
 ## Releasing this repository
@@ -440,12 +333,10 @@ the reusable `ci.yaml` at the commit under test. No secrets beyond
 Maintainers cut a release as follows:
 
 1. Open a PR that adds a new `## X.Y.Z` section at the top of
-   [RELEASES.md](RELEASES.md), above the previous version, writes the notes
-   for it (`### Added` / `### Changed` / `### Fixed`, and `### Conventions`
-   for what `conventions sync` will change in a consumer), and sets the same
-   version in [Cargo.toml](Cargo.toml) (`workspace.package.version`, which
-   `crates/conventions` inherits). Line 1 of `RELEASES.md` is the version the
-   `Release` workflow will tag. Squash-merge the PR.
+   [RELEASES.md](RELEASES.md), above the previous version, and writes the
+   notes for it (`### Added` / `### Changed` / `### Fixed` / `### Removed`).
+   Line 1 of `RELEASES.md` is the version the `Release` workflow will tag.
+   Squash-merge the PR.
 2. In Actions, run the **Release** workflow (`self-release.yaml`) on `main`.
 3. The workflow reads the version from line 1, pushes an annotated `vX.Y.Z`
    tag at the head of `main`, and creates a GitHub release named
@@ -458,8 +349,6 @@ The workflow refuses to run when:
 
 - it is dispatched on a branch other than `main`;
 - line 1 of `RELEASES.md` is not exactly `## MAJOR.MINOR.PATCH`;
-- the `conventions` crate's version differs from line 1, since the program
-  reports that version as the pin it was built for;
 - the section under line 1 is empty (write the notes first);
 - `vX.Y.Z` is already tagged **and** released, which means line 1 was not
   bumped since the last release.
@@ -473,9 +362,8 @@ signed commits), so there is no `Released <date>` line in `RELEASES.md` and
 the date lives on the GitHub release. "Unreleased" is simply a version on
 line 1 that has no tag yet.
 
-After tagging, each consumer takes the release through Renovate's grouped pull
-request (or by hand: bump the `?ref=` and every `uses:`, run
-`make conventions-sync`, commit what changed).
+After tagging, each consumer bumps the `?ref=` and every `uses:` to the new
+tag.
 
 ## Composite actions in reusable workflows
 
@@ -509,8 +397,7 @@ it from git without touching tracked files, so neither `git commit -am` nor
 `peter-evans/create-pull-request` (which stages untracked files by default)
 can carry it into a consumer branch. The composite actions run with the
 workspace root as their working directory, so `cargo` and `git` still act on
-the consumer repository. The `conventions` job of `ci.yaml` uses the same
-checkout to build the program at the workflow's own commit.
+the consumer repository.
 
 `job.workflow_repository` / `job.workflow_sha` are newer than the `job`
 context type bundled with the pinned actionlint, so

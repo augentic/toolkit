@@ -1,3 +1,20 @@
+## 0.5.0
+
+### Removed
+
+- The `conventions/` tree, the `conventions` program and everything that ran
+  it: the `conventions` job of `ci.yaml`, the `conventions-sync` and
+  `conventions-check` tasks of `mise/rust.toml` (`ci` ends at `deny` and
+  `check` at `deps`), and the crate version check of `self-release.yaml`.
+  Every file the program wrote is the consumer's own from this tag: delete
+  the `Managed by augentic/toolkit` notices and `BEGIN` / `END` markers, and
+  bump the `uses:` tags and the mise `?ref=` by hand.
+- The Rust workspace that hosted the program, with `self-ci.yaml`, the root
+  `mise.toml` and `Makefile`, and the cargo-vet store of its dependencies.
+  `supply-chain/audits.toml` stays as the organisation's trusted-publisher
+  reference, and `vet-aggregate.yaml` still rebuilds
+  `supply-chain/augentic/audits.toml` from it and every consumer's.
+
 ## 0.4.0
 
 ### Added

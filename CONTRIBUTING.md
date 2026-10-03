@@ -1,7 +1,5 @@
 # Contributing
 
-<!-- BEGIN Managed by augentic/toolkit: conventions/contributing/dco.md -->
-<!-- Do not edit: run `make conventions-sync`. -->
 ## Developer's Certificate of Origin
 
 All contributions must include acceptance of the [DCO](https://developercertificate.org/):
@@ -52,26 +50,20 @@ Signed-off-by: Jane Example <jane@example.com>
 ```
 
 For legal reasons, no anonymous or pseudonymous contributions are accepted; open a GitHub issue if this is a problem for you.
-<!-- END Managed by augentic/toolkit: conventions/contributing/dco.md -->
 
-<!-- BEGIN Managed by augentic/toolkit: conventions/contributing/pull-requests.md -->
-<!-- Do not edit: run `make conventions-sync`. -->
 ## Pull request procedure
 
 Pull requests should be targeted at the `main` branch. Before creating a pull request, go through this checklist:
 
 1. Create a feature branch off of `main`.
 2. [Rebase](https://git-scm.com/book/en/Git-Branching-Rebasing) your local changes against `main`.
-3. Run `make ci` and confirm that it passes: exactly the CI jobs, in order.
+3. Run [actionlint](https://github.com/rhysd/actionlint) from the repository root and confirm that it passes, as the `Lint workflows` check does.
 4. Accept the Developer's Certificate of Origin on all commits (see above).
 
 All contributions are made via pull request. All patches from all contributors get reviewed. At least one review from a maintainer is required for all patches (even patches from maintainers). When CI fails, authors are expected to update the pull request until it passes.
 
 Normally, all pull requests must include tests that cover your change. Occasionally, a change will be very difficult to test for; in those cases, include a note in your commit message explaining why.
-<!-- END Managed by augentic/toolkit: conventions/contributing/pull-requests.md -->
 
-<!-- BEGIN Managed by augentic/toolkit: conventions/contributing/conduct.md -->
-<!-- Do not edit: run `make conventions-sync`. -->
 ## Conduct
 
 Whether you are a regular contributor or a newcomer, we care about making this community a safe place for you and we've got your back.
@@ -83,4 +75,3 @@ Whether you are a regular contributor or a newcomer, we care about making this c
 - Likewise any spamming, trolling, flaming, baiting or other attention-stealing behaviour is not welcome.
 
 We welcome discussion about creating a welcoming, safe, and productive environment for the community. If you have any questions, feedback, or concerns please let us know with a GitHub issue. The [Code of Conduct](CODE_OF_CONDUCT.md) applies throughout.
-<!-- END Managed by augentic/toolkit: conventions/contributing/conduct.md -->

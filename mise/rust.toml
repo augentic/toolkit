@@ -18,14 +18,13 @@
 # `run` steps execute in order (`depends` would run them in parallel), so
 # `fmt` finishes rewriting sources before anything lints them.
 [check]
-description = "Local pre-push checks: audit, fmt, lint, outdated, deps, conventions-check"
+description = "Local pre-push checks: audit, fmt, lint, outdated, deps"
 run = [
   { task = "audit" },
   { task = "fmt" },
   { task = "lint" },
   { task = "outdated" },
   { task = "deps" },
-  { task = "conventions-check" },
 ]
 
 # Exactly the jobs of `.github/workflows/ci.yaml`, one task per job (see the
@@ -40,7 +39,6 @@ run = [
   { task = "docs" },
   { task = "vet" },
   { task = "deny" },
-  { task = "conventions-check" },
 ]
 
 # -------------------------------------
@@ -158,49 +156,6 @@ run = [
   "cargo vet regenerate unpublished",
   "cargo vet --locked",
 ]
-
-# -------------------------------------
-# Conventions
-# -------------------------------------
-
-# The shared files every consumer carries (README.md "Conventions"). Both
-# tasks run the program of the toolkit revision this file is included from,
-# the `?ref=vX.Y.Z` of the include line, built once per pin into
-# `target/toolkit/`, over the repository they are invoked in.
-# `CONVENTIONS_TOOLKIT=<checkout>` runs a toolkit checkout's program over its
-# tree instead, which is how the tree is developed and how the toolkit syncs
-# its own root.
-[conventions-sync]
-description = "Write the shared conventions into this repository at the pinned toolkit revision"
-depends = ["conventions sync"]
-
-[conventions-check]
-description = "Fail when a shared convention has drifted from the pinned toolkit revision (mirrors CI)"
-depends = ["conventions check"]
-
-[conventions]
-hide = true
-description = "Run the pinned conventions program"
-usage = 'arg "<command>" help="sync or check"'
-run = '''
-#!/usr/bin/env bash
-set -euo pipefail
-if [ -n "${CONVENTIONS_TOOLKIT:-}" ]; then
-  exec cargo run --quiet --locked --manifest-path "$CONVENTIONS_TOOLKIT/Cargo.toml" -p conventions -- \
-    --toolkit "$CONVENTIONS_TOOLKIT" "${usage_command?}"
-fi
-ref=$(sed -nE 's#.*github\.com/augentic/toolkit(\.git)?//mise/rust\.toml\?ref=(v[0-9][^"'"'"' ]*).*#\2#p' mise.toml | head -n 1)
-if [ -z "$ref" ]; then
-  echo "mise.toml does not include github.com/augentic/toolkit.git//mise/rust.toml?ref=vX.Y.Z; there is no pin to run" >&2
-  exit 1
-fi
-root="${CARGO_TARGET_DIR:-target}/toolkit"
-bin="$root/bin/conventions"
-if [ ! -x "$bin" ] || [ "$("$bin" --version)" != "conventions ${ref#v}" ]; then
-  cargo install --quiet --locked --git https://github.com/augentic/toolkit --tag "$ref" --root "$root" conventions
-fi
-exec "$bin" "${usage_command?}"
-'''
 
 # -------------------------------------
 # Helpers (not part of ci)

@@ -27,10 +27,6 @@ paths:
       - 'property "workflow_repository" is not defined in object type \{check_run_id: number;'
       - 'property "workflow_sha" is not defined in object type \{check_run_id: number;'
       - 'unknown permission scope "copilot-requests"'
-  .github/workflows/ci.yaml:
-    ignore:
-      - 'property "workflow_repository" is not defined in object type \{check_run_id: number;'
-      - 'property "workflow_sha" is not defined in object type \{check_run_id: number;'
   .github/workflows/vet-aggregate.yaml:
     ignore:
       - 'missing input "app-id" which is required by action "actions/create-github-app-token@v3"'
