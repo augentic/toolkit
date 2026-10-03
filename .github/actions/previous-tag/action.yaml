@@ -1,0 +1,58 @@
+name: Previous tag
+description: The highest semver tag strictly below a version.
+
+inputs:
+  version:
+    description: The MAJOR.MINOR.PATCH version to look below.
+    required: true
+
+outputs:
+  tag:
+    description: |
+      The highest `vMAJOR.MINOR.PATCH` tag below `version`, or empty when the
+      repository has none.
+    value: ${{ steps.previous.outputs.result }}
+
+runs:
+  using: composite
+  steps:
+    # Correct on `main` (the previous minor) and on a release branch (the
+    # previous patch), even when newer minor releases have been tagged since
+    # the branch was cut.
+    - name: Get previous version
+      id: previous
+      uses: actions/github-script@v9
+      env:
+        NEW_VERSION: ${{ inputs.version }}
+      with:
+        result-encoding: string
+        script: |
+          const parse = (name) => {
+            const match = /^v(\d+)\.(\d+)\.(\d+)$/.exec(name);
+            return match ? match.slice(1).map(Number) : null;
+          };
+          const compare = (a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+
+          const target = parse(`v${process.env.NEW_VERSION}`);
+          if (!target) {
+            core.setFailed(`version '${process.env.NEW_VERSION}' is not MAJOR.MINOR.PATCH`);
+            return '';
+          }
+
+          const tags = await github.paginate(github.rest.repos.listTags, {
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            per_page: 100,
+          });
+
+          let previous = null;
+          for (const tag of tags) {
+            const parsed = parse(tag.name);
+            if (!parsed || compare(parsed, target) >= 0) continue;
+            if (!previous || compare(parsed, previous.parsed) > 0) {
+              previous = { name: tag.name, parsed };
+            }
+          }
+
+          core.info(`previous tag for v${process.env.NEW_VERSION}: ${previous?.name ?? '(none)'}`);
+          return previous?.name ?? '';

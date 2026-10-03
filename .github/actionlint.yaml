@@ -7,6 +7,9 @@
 # reusable workflows use to check out their own composite actions, so those
 # are reported as undefined properties. Ignore them per workflow so a typo in
 # any other context property is still caught.
+#
+# actionlint v1.7.12 predates the `copilot-requests` permission scope, which
+# `release.yaml` and `patch.yaml` grant for the drafting of the release notes.
 paths:
   .github/workflows/release.yaml:
     ignore:
@@ -14,6 +17,7 @@ paths:
       - 'input "client-id" is not defined in action "actions/create-github-app-token@v3"'
       - 'property "workflow_repository" is not defined in object type \{check_run_id: number;'
       - 'property "workflow_sha" is not defined in object type \{check_run_id: number;'
+      - 'unknown permission scope "copilot-requests"'
   .github/workflows/publish.yaml:
     ignore:
       - 'property "workflow_repository" is not defined in object type \{check_run_id: number;'
@@ -22,6 +26,7 @@ paths:
     ignore:
       - 'property "workflow_repository" is not defined in object type \{check_run_id: number;'
       - 'property "workflow_sha" is not defined in object type \{check_run_id: number;'
+      - 'unknown permission scope "copilot-requests"'
   .github/workflows/ci.yaml:
     ignore:
       - 'property "workflow_repository" is not defined in object type \{check_run_id: number;'

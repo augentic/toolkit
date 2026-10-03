@@ -348,6 +348,48 @@ the App ID or the Client ID as the JWT issuer, so the existing secret keeps
 working and nothing needs to be re-provisioned. If you would rather store the
 App's Client ID (`Iv1...`) in `APP_ID`, that works too.
 
+#### Drafted release notes
+
+`release.yaml` and `patch.yaml` draft the new `RELEASES.md` section before
+they write it: a `notes` job puts the pull requests merged since the previous
+tag (the `(#N)` squash-merge subjects between the tag and `main`, or between
+the branch's tag and its head for a patch) to the Copilot CLI through
+[`github/copilot-release-notes`](https://github.com/github/copilot-release-notes),
+pinned by commit, under the shared style guide
+[`.github/release-notes-instructions.md`](.github/release-notes-instructions.md):
+one entry per pull request under `Added`, `Changed`, `Fixed`, `Removed`, or
+`Security`; version bumps and behaviour-free dependency bumps skipped; an
+entry the model is unsure of under `### Needs Review` with its reason. A
+repository's own `.github/release-notes-instructions.md` takes the shared
+guide's place when it carries one.
+
+Prerequisites:
+
+- The organisation's Copilot plan allows the CLI under a workflow's token
+  ("Allow use of Copilot CLI billed to the organization"). The requests are
+  billed to the organisation; no personal token is involved.
+- The caller's `permissions` carry `copilot-requests: write`. A reusable
+  workflow cannot exceed its caller, so each repository's `release.yaml` and
+  `patch.yaml` grant it beside `contents: write` (and `pull-requests: write`
+  for the release).
+
+The `notes` job holds no secret and writes nothing: `contents: read`,
+`pull-requests: read`, `copilot-requests: write`, a checkout without
+credentials, and the CLI pinned by `npm install -g @github/copilot@<version>`
+before the action runs (Dependabot proposes the action's commit bump; the CLI
+pin is bumped by hand beside it). A draft is accepted when it carries at least
+one entry and no `## ` heading or `---` rule, and reaches the `create` or
+`patch` job as an artifact. When the job fails, the action's five-minute bound
+is exceeded, or nothing is drafted (the first release has no previous tag; a
+very large range may not finish), the run warns and the section is the list
+GitHub generates, as before: nothing blocks the cut.
+
+The draft is reviewed where the notes have always been reviewed: the `Update
+release notes for <version>` commit on the release branch, which the "bump
+version" pull request links. Resolve every entry under `### Needs Review`
+there; `publish.yaml` refuses to date and tag a `RELEASES.md` that still
+carries that heading.
+
 ### `publish.yaml`
 
 No secrets beyond `GITHUB_TOKEN`. The workflow is safe to re-run after a
