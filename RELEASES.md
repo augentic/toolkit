@@ -1,3 +1,55 @@
+## 0.4.0
+
+### Added
+
+### Changed
+
+### Conventions
+
+- Shared TOML tables (`Cargo.toml` lints, `deny.toml`, the vet imports,
+  `rust-toolchain.toml`) are owned by key: every key the tree sets holds the
+  tree's value wherever the file keeps it, a key the file lacks is added
+  beside the shared keys with its comment from the tree, a key the manifest
+  lists as `retired` is removed, and every other key of the file is the
+  repository's and never moves. The first `sync` drops the
+  `conventions:begin` / `conventions:end` pairs 0.3.0 wrote around those
+  tables; `sync` and `check` print the repository's own keys of each shared
+  table in their place.
+- The managed notice is two lines, `Managed by augentic/toolkit:
+  conventions/<source>` and ``Do not edit: run `make conventions-sync`.``, on
+  every whole file and stub, so the header every consumer carries changes at
+  the bump. Block markers carry the same notice behind `BEGIN` and `END`,
+  keyed by the source path with its extension
+  (`<!-- BEGIN Managed by augentic/toolkit: conventions/agents/git.md -->`);
+  a 0.3.0 `conventions:begin` / `conventions:end` pair is respelled in place
+  at the first `sync` and is read for this release only.
+- `agents/commands.md` states the rule in that one vocabulary: a file that
+  opens with `Managed by augentic/toolkit`, everything from a `BEGIN` line to
+  its `END` line, and every value the shared TOML tables set, is written by
+  `make conventions-sync`.
+- `conventions.toml` is gone and nothing reads it; delete the file at the
+  bump. Each knob returns to the file that owns it: `targets` is
+  `rust-toolchain.toml`'s and the callers' `with:`, `wasm-packages` and
+  `outdated-ignore` are `mise.toml [env]` and the callers' `with:`, with no
+  checker holding the two equal; `name`, `pinned` and `guest-clippy` have no
+  replacement.
+- The four caller workflows `ci.yaml`, `audit.yaml`, `patch.yaml` and
+  `release.yaml` are the repository's, pin-rewritten like `publish.yaml` and
+  never rendered. Stub mode is gone with them; the first `sync` strips the
+  0.3.0 header from each caller and from `rust-toolchain.toml`.
+- `rust-toolchain.toml` is a shared table owned by key: `channel` and
+  `components` hold the tree's values and `targets` is the repository's.
+- The guest deny-list (`disallowed-methods`, `disallowed-types`) is no longer
+  managed; each guest repository owns the `clippy.toml` it already carries.
+- `make conventions-sync`, `make conventions-check` and the `conventions` job
+  of `ci.yaml` run over whichever repository invokes them, with no presence
+  test; the toolkit root carries the conventions itself, synced from its
+  working tree through `CONVENTIONS_TOOLKIT = "."`.
+- `lints/rust.toml` and `lints/clippy.toml` carry the comments as omnia
+  writes them: no documentation URLs, one line over the restriction picks.
+  A comment reaches a consumer only with a key it lacked, so a repository's
+  existing comments stand.
+
 ## 0.3.0
 
 This repository is now `augentic/toolkit`, moved from `augentic/.github` with

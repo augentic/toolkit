@@ -1,8 +1,7 @@
 use serde::Deserialize;
 
 // The shape of `conventions/manifest.toml`: one list per mode. A `source` is
-// a path under `conventions/`, a `target` a path under the consumer root that
-// may carry `{{key}}` placeholders.
+// a path under `conventions/`, a `target` a path under the consumer root.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Manifest {
@@ -12,8 +11,6 @@ pub struct Manifest {
     pub block: Vec<Blocks>,
     #[serde(default)]
     pub table: Vec<Tables>,
-    #[serde(default)]
-    pub stub: Vec<Stub>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -40,30 +37,19 @@ pub struct Blocks {
     pub sources: Vec<String>,
 }
 
-// `markers = false` is for a file another tool rewrites in its own layout
-// (`cargo vet` owns `supply-chain/config.toml`): the keys the block sets must
-// hold its values, and nothing else about the file is held.
+// `retired` lists the dotted keys the sources once set, removed from the
+// target when present.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Tables {
     pub target: String,
     pub sources: Vec<String>,
-    #[serde(default = "yes")]
-    pub markers: bool,
+    #[serde(default)]
+    pub retired: Vec<String>,
 }
 
-const fn yes() -> bool {
-    true
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Stub {
-    pub source: String,
-    pub target: String,
-}
-
-// A block's name is its source path without the extension.
+// A block's name before 0.4.0, its source path without the extension, which
+// `marker::splice` reads to respell an old pair in place.
 pub fn block_name(source: &str) -> &str {
     match source.rsplit_once('.') {
         Some((stem, extension)) if !extension.contains('/') => stem,

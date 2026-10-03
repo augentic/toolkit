@@ -14,4 +14,4 @@ make cov # cargo llvm-cov nextest --workspace --all-features --summary-only
 make sweep # drop target/ artifacts untouched for a week
 ```
 
-A file with a `Managed by augentic/toolkit` header, and everything between a `conventions:begin` and `conventions:end` marker pair, is written by `make conventions-sync`: never edit it here. Change it in [`augentic/toolkit`](https://github.com/augentic/toolkit) instead. If `make ci` cannot run, say exactly why and which checks ran instead.
+A file that opens with `Managed by augentic/toolkit`, everything from a `BEGIN Managed by augentic/toolkit` line to its `END` line, and every value the shared TOML tables set, is written by `make conventions-sync`: never edit it here. Change it in [`augentic/toolkit`](https://github.com/augentic/toolkit) instead. If `make ci` cannot run, say exactly why and which checks ran instead.

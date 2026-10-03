@@ -3,7 +3,8 @@
 # Help: https://mise.jdx.dev/tasks/
 #:schema https://mise.jdx.dev/schema/mise-task.json
 #
-# Consumer knobs, set under `[env]` in the consuming `mise.toml`:
+# Consumer knobs, set under `[env]` in the consuming `mise.toml`, each the
+# repository's own value for what its caller workflow passes as an input:
 #   WASM32_PACKAGES  space-separated workspace members linted for wasm32-wasip2
 #                    by `lint-wasm`; unset = whole workspace. Mirrors the
 #                    `wasm-packages` input of `.github/workflows/ci.yaml`.
@@ -165,9 +166,10 @@ run = [
 # The shared files every consumer carries (README.md "Conventions"). Both
 # tasks run the program of the toolkit revision this file is included from,
 # the `?ref=vX.Y.Z` of the include line, built once per pin into
-# `target/toolkit/`. A repository without `conventions.toml` has nothing to
-# sync or check and passes. `CONVENTIONS_TOOLKIT=<checkout>` runs a toolkit
-# checkout's program over its tree instead, which is how the tree is developed.
+# `target/toolkit/`, over the repository they are invoked in.
+# `CONVENTIONS_TOOLKIT=<checkout>` runs a toolkit checkout's program over its
+# tree instead, which is how the tree is developed and how the toolkit syncs
+# its own root.
 [conventions-sync]
 description = "Write the shared conventions into this repository at the pinned toolkit revision"
 depends = ["conventions sync"]
@@ -183,10 +185,6 @@ usage = 'arg "<command>" help="sync or check"'
 run = '''
 #!/usr/bin/env bash
 set -euo pipefail
-if [ ! -f conventions.toml ]; then
-  echo "no conventions.toml in this repository; nothing to ${usage_command?}"
-  exit 0
-fi
 if [ -n "${CONVENTIONS_TOOLKIT:-}" ]; then
   exec cargo run --quiet --locked --manifest-path "$CONVENTIONS_TOOLKIT/Cargo.toml" -p conventions -- \
     --toolkit "$CONVENTIONS_TOOLKIT" "${usage_command?}"

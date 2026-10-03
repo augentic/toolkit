@@ -6,7 +6,7 @@
 //! what `sync` would write, with a unified diff, and each structural rule the
 //! repository breaks, and exits 1 when there is anything to report.
 
-mod config;
+mod consumer;
 mod manifest;
 mod marker;
 mod pin;
@@ -22,7 +22,7 @@ use std::process::ExitCode;
 use anyhow::{Context as _, Result};
 use clap::{Parser, Subcommand};
 
-use crate::config::Consumer;
+use crate::consumer::Consumer;
 use crate::plan::Plan;
 use crate::toolkit::Toolkit;
 
@@ -67,7 +67,7 @@ fn run(cli: &Cli) -> Result<bool> {
         Some(dir) => Toolkit::checkout(dir)?,
         None => Toolkit::embedded(),
     };
-    let consumer = Consumer::open(&cli.root, &toolkit)
+    let consumer = Consumer::open(&cli.root)
         .with_context(|| format!("reading the repository at {}", cli.root.display()))?;
     let plan = Plan::build(&toolkit, &consumer)?;
 

@@ -47,31 +47,22 @@ reference: it can change under a consumer at any time.
 
 ## Consumer configuration
 
-A Rust repository adopts the shared tasks, CI and conventions with three files:
+A Rust repository adopts the shared tasks, CI and conventions with its
+`mise.toml`, the synced `Makefile`, and its own caller workflows:
 
 ```toml
 # mise.toml — the one pin, plus the knobs the shared tasks read and any
 # repository-specific tasks (a local task shadows a shared one of the same name)
 [task_config]
-includes = ["git::https://github.com/augentic/toolkit.git//mise/rust.toml?ref=v0.3.0"]
+includes = ["git::https://github.com/augentic/toolkit.git//mise/rust.toml?ref=v0.4.0"]
 
 [env]
 # Space-separated workspace members `lint-wasm` clippies for wasm32-wasip2.
-# Unset = whole workspace. Same value as `wasm-packages` in conventions.toml.
+# Unset = whole workspace. The value `ci.yaml` passes as `wasm-packages`.
 WASM32_PACKAGES = "guest-crate examples"
-# Comma-separated crates `outdated` ignores. Same value as `outdated-ignore`
-# in conventions.toml.
+# Comma-separated crates `outdated` ignores. The value `audit.yaml` passes as
+# `outdated`.
 OUTDATED_IGNORE = "cap-std,cap-primitives"
-```
-
-```toml
-# conventions.toml — the parameters the rendered stubs take
-name = "example"
-targets = ["wasm32-wasip2"]
-wasm-packages = ["guest-crate", "examples"]
-outdated-ignore = ["cap-std", "cap-primitives"]
-guest-clippy = ["clippy.toml"]
-pinned = []
 ```
 
 ```makefile
@@ -79,9 +70,27 @@ pinned = []
 # and never installs mise itself
 ```
 
-Then `make conventions-sync` writes every managed file (see
-[Conventions](#conventions)), including the `.github/workflows/ci.yaml` caller
-that mirrors the mise tasks. `make ci` runs the same checks as the workflow,
+```yaml
+# .github/workflows/ci.yaml — the repository's own caller; the toolkit
+# rewrites the pin and nothing else
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  ci:
+    uses: augentic/toolkit/.github/workflows/ci.yaml@v0.4.0
+    secrets: inherit
+    with:
+      targets: wasm32-wasip2
+      wasm-packages: guest-crate examples
+```
+
+`audit.yaml`, `patch.yaml`, `release.yaml` and `publish.yaml` take the same
+shape, each calling its reusable workflow with the inputs the repository
+chooses. Then `make conventions-sync` writes every managed file (see
+[Conventions](#conventions)). `make ci` runs the same checks as the workflow,
 `conventions-check` among them; `make check` adds the local-only advisories
 (`audit`, `outdated`, `deps`) and rewrites formatting in place.
 
@@ -162,79 +171,89 @@ and the reusable `ci.yaml` do.
 
 | Mode | Files | Ownership |
 |---|---|---|
-| whole | `rustfmt.toml`, `taplo.toml`, `Makefile`, `LICENSE-MIT`, `LICENSE-APACHE`, `CODE_OF_CONDUCT.md`, `GOVERNANCE.md`, `renovate.json` | Written verbatim from the tree, with a one-line managed header where the format takes comments (the licences and `renovate.json` carry none). A local edit fails `check`; change the tree instead. |
-| block | `AGENTS.md`, `CONTRIBUTING.md`, `.gitignore`, `.github/dependabot.yml` | A shared region between [markers](#markers) inside a file the repository owns; the repository's own text sits around it. |
-| table | `Cargo.toml`, `deny.toml`, each `guest-clippy` file; `supply-chain/config.toml` without markers | A block of TOML between hash markers: complete tables, or the leading keys of one table (`[workspace.lints.rust]`, `[licenses]`) with the repository's keys of that table following the end marker. TOML cannot reopen a table, so the repository's keys must follow the block, never precede it. With `markers = false`, for a file another tool rewrites in its own layout (`cargo vet` owns `supply-chain/config.toml`), the keys the block sets (`[imports.*]`) must hold its values and nothing else about the file is held. |
-| stub | `.github/workflows/{ci,audit,patch,release}.yaml`, `rust-toolchain.toml` | Rendered from a template in the tree and the repository's `conventions.toml`; the whole file is managed. |
-| pin | every other `.github/workflows/*.yaml`, plus the `pinned` files of `conventions.toml` | Repository-owned; only the `@vX.Y.Z` of each `uses: augentic/toolkit/...` reference is managed. `sync` rewrites it to the pin, `check` compares. |
+| whole | `rustfmt.toml`, `taplo.toml`, `Makefile`, `LICENSE-MIT`, `LICENSE-APACHE`, `CODE_OF_CONDUCT.md`, `GOVERNANCE.md`, `renovate.json` | Written verbatim from the tree, opening with the two-line [managed notice](#the-managed-notice) where the format takes comments (the licences and `renovate.json` carry none). A local edit fails `check`; change the tree instead. |
+| block | `AGENTS.md`, `CONTRIBUTING.md`, `.gitignore`, `.github/dependabot.yml` | A shared region inside a file the repository owns, from a `BEGIN Managed by augentic/toolkit` line to its `END` line; the repository's own text sits around it. |
+| table | `Cargo.toml`, `deny.toml`, `supply-chain/config.toml`, `rust-toolchain.toml` | Shared TOML tables owned by key: every key the tree sets (`[workspace.lints.rust]`, `[licenses] allow`, `[imports.*]`, `[toolchain] channel` and `components`) holds the tree's value, wherever the file keeps it, and every other key of the file (`[toolchain] targets` among them) is the repository's and never moves. A key the file lacks is added beside the shared keys, with its comment from the tree; a key the manifest lists as `retired` is removed. No notice is written into the file; `sync` and `check` print the repository's own keys of each shared table. |
+| pin | every `.github/workflows/*.yaml` | Repository-owned; only the `@vX.Y.Z` of each `uses: augentic/toolkit/...` reference is managed. `sync` rewrites it to the pin, `check` compares. |
 
-Everything else is the repository's: `mise.toml` (the pin line apart),
-`clippy.toml` beyond the guest deny-list, `.vscode/`, `.cargo/`, the vet store
+Everything else is the repository's: `mise.toml` (the pin line apart), the
+callers' `with:` inputs, `clippy.toml`, `.vscode/`, `.cargo/`, the vet store
 beyond its imports.
 
-### Markers
+### The managed notice
 
-```markdown
-<!-- conventions:begin agents/git -->
-...
-<!-- conventions:end agents/git -->
-```
+One phrase names everything the toolkit writes: `Managed by augentic/toolkit`,
+followed by the path of the source in this repository, then the instruction
+on its own line. A whole file opens with the two lines and a blank line:
 
 ```toml
-# conventions:begin lints/rust
-[workspace.lints.rust]
-...
-# conventions:end lints/rust
+# Managed by augentic/toolkit: conventions/rustfmt.toml
+# Do not edit: run `make conventions-sync`.
+
+# https://github.com/rust-lang/rustfmt/blob/master/Configurations.md
 ```
 
-Markdown takes the HTML form; TOML, YAML and `.gitignore` the hash form. The
-name is the block's path under `conventions/` without its extension.
+A block carries the same two lines behind `BEGIN` and closes with `END` and
+the identifier repeated, so both edges of every block answer
+`rg "Managed by augentic/toolkit"` and the closing line stands on its own
+when a reader lands on it mid-file:
 
-`sync` replaces what sits between a pair. A block the file lacks is appended
-at the end, in manifest order; a block-mode file the repository lacks is
-created with a heading and the blocks. A TOML block the file lacks is merged:
-the first table the block declares is taken over at its position in the file,
-the keys the block sets are removed from the file's copy, and the file's
-remaining keys of that table follow the end marker; every other table the
-block declares must carry nothing the block does not, and is replaced; a block
-whose tables the file lacks is appended, or placed before the first table when
-it holds root keys. `check` verifies content and presence, never position, so
-a block may be moved by hand.
+```markdown
+<!-- BEGIN Managed by augentic/toolkit: conventions/agents/git.md -->
+<!-- Do not edit: run `make conventions-sync`. -->
+## Git
+...
+<!-- END Managed by augentic/toolkit: conventions/agents/git.md -->
+```
 
-### `conventions.toml`
+```yaml
+# BEGIN Managed by augentic/toolkit: conventions/dependabot/actions.yml
+# Do not edit: run `make conventions-sync`.
+  - package-ecosystem: github-actions
+    ...
+# END Managed by augentic/toolkit: conventions/dependabot/actions.yml
+```
 
-| Key | Type | Used by |
-|---|---|---|
-| `name` | string | Prose and stubs that name the repository; the heading of a created `AGENTS.md`. |
-| `targets` | array of strings | `ci.yaml` `targets` (comma-joined) and `rust-toolchain.toml` `targets`. |
-| `wasm-packages` | array of strings | `ci.yaml` `wasm-packages` (space-joined). `check` holds `WASM32_PACKAGES` in `mise.toml` to the same value. |
-| `outdated-ignore` | array of strings | `audit.yaml` `outdated` (comma-joined). `check` holds `OUTDATED_IGNORE` in `mise.toml` to the same value. |
-| `guest-clippy` | array of paths | The `clippy.toml` files that lint guest crates; each takes the guest deny-list block. Empty for a workspace with no guest. |
-| `pinned` | array of paths | Files outside `.github/workflows/` that reference `augentic/toolkit/...@vX.Y.Z` (a template, a document) and take the pin rewrite. |
+Markdown takes the HTML form; YAML and `.gitignore` the hash form. The name
+is the block's source path, `conventions/agents/git.md`, so it is the file
+to open here.
 
-A stub line whose only placeholder renders empty is dropped, as is a YAML key
-left with no children, so an empty `wasm-packages` yields a `with:` block of
-`targets` alone.
+`sync` rewrites a block from its `BEGIN` line to its `END` line. A block the
+file lacks is appended at the end, in manifest order; a block-mode file the
+repository lacks is created with a heading and the blocks. `check` verifies
+content and presence, never position, so a block may be moved by hand. A pair
+written by 0.3.0 (`conventions:begin agents/git` / `conventions:end
+agents/git`, in TOML files too) is read for this release alone: the first
+`sync` respells a block's pair in place and drops the pair around a TOML
+table, whose keys are owned by value from then on. The one-line header 0.3.0
+wrote on `rust-toolchain.toml` and the four caller workflows it rendered is
+dropped the same way: those files are the repository's now, held by key and
+by pin.
 
 ### What `check` enforces
 
-- Every managed file renders byte-equal to the tree and `conventions.toml`;
-  otherwise the unified diff is printed and the exit code is 1.
+- Every managed file renders byte-equal to the tree; otherwise the unified
+  diff is printed and the exit code is 1.
 - Every `uses: augentic/toolkit/...@vX.Y.Z` equals the mise `?ref=vX.Y.Z`,
   and the program's own version equals it (the tag it was built from).
 - Marker pairs are well-formed, uniquely named, and never nested.
-- A file holding a TOML block still parses as TOML.
+- Every key a shared TOML table sets holds the tree's value, a `retired` key
+  is gone, and the file parses as TOML; the repository's other keys are not
+  held.
 - `AGENTS.md` is at most 30 KiB and carries the shared blocks: agent loaders
   cap what they read (Codex at 32 KiB across the chain), and the Git rule
   must be inside the cap.
 - The code of conduct is spelled `CODE_OF_CONDUCT.md`, the one spelling
   GitHub's community profile recognises.
-- `WASM32_PACKAGES` and `OUTDATED_IGNORE` in `mise.toml` mirror
-  `conventions.toml`.
 
 ### Developing the tree
 
-A change to `conventions/` is tried against a consumer checkout before it is
+This repository carries the conventions it publishes: its `mise.toml` sets
+`CONVENTIONS_TOOLKIT = "."`, so `make conventions-sync` and
+`make conventions-check` run the working tree's program over the root, and a
+change under `conventions/` re-syncs the root in the same commit (`make ci`
+says so when it is forgotten; its `conventions` job runs `check` here as in
+any consumer). A change is tried against a consumer checkout before it is
 tagged:
 
 ```shell
@@ -246,12 +265,8 @@ cargo run -p conventions -- check --toolkit . --root ../emery
 takes the program's own version as the pin, so the consumer's `mise.toml` need
 not point anywhere yet. From the consumer's side, `CONVENTIONS_TOOLKIT=../toolkit
 make conventions-sync` runs the same thing through the mise task. The crate's
-tests run `sync` then `check` over a fixture consumer and fail each class of
-local drift.
-
-A repository without `conventions.toml` has no conventions to sync or check:
-the tasks and the CI job say so and pass, which is how this repository's own
-CI and a freshly scaffolded guest run before they adopt the tree.
+tests run `sync` then `check` over a fixture consumer, migrate one 0.3.0 left,
+and fail each class of local drift.
 
 ## Supply chain
 
