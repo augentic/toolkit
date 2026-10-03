@@ -1,6 +1,6 @@
 # Create a release.
-# The workflow creates a new release branch and updates the version of the main
-# branch.
+# The workflow drafts the release notes, creates a new release branch, and
+# updates the version of the main branch.
 
 name: Create Release
 
@@ -23,9 +23,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
-
-env:
-  CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+  copilot-requests: write
 
 jobs:
   skip:
@@ -37,13 +35,133 @@ jobs:
           echo "This workflow only runs on the 'main' branch"
           exit 1
 
+  # Draft the release notes from the pull requests merged since the previous
+  # tag. The job holds no secret and writes nothing: it reads the repository,
+  # puts the pull requests to the Copilot CLI under the built-in token, and
+  # hands the draft on as an artifact. Nothing here blocks the cut; `create`
+  # falls back to the notes GitHub generates when no draft arrives.
+  notes:
+    name: Draft release notes
+    if: github.ref_name == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    permissions:
+      contents: read
+      pull-requests: read
+      copilot-requests: write
+    outputs:
+      drafted: ${{ steps.accept.outputs.drafted }}
+    steps:
+      # The whole history, so the pull requests between the two refs are
+      # found in the log and their diffs can be read.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check out shared actions
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .augentic
+          persist-credentials: false
+
+      - name: Release version
+        id: release
+        uses: ./.augentic/.github/actions/cargo-version
+
+      - name: Previous tag
+        id: previous
+        uses: ./.augentic/.github/actions/previous-tag
+        with:
+          version: ${{ steps.release.outputs.version }}
+
+      # The drafting action runs whichever `copilot` is on PATH and installs
+      # the latest otherwise; installing first pins the CLI.
+      - name: Install Copilot CLI
+        id: cli
+        if: steps.previous.outputs.tag != ''
+        continue-on-error: true
+        run: npm install -g @github/copilot@1.0.91
+
+      # The repository's own style guide when it carries one, else the
+      # shared one.
+      - name: Release notes instructions
+        id: instructions
+        run: |
+          set -euo pipefail
+          path=.github/release-notes-instructions.md
+          if [ ! -f "$path" ]; then
+            path=.augentic/.github/release-notes-instructions.md
+          fi
+          echo "path=$path" >> "$GITHUB_OUTPUT"
+
+      - name: Draft
+        id: draft
+        if: steps.cli.outcome == 'success'
+        continue-on-error: true
+        uses: github/copilot-release-notes@29ba181a86b88f3acee62a03369033edfa982ab9 # v1.0.3
+        with:
+          base-ref: ${{ steps.previous.outputs.tag }}
+          head-ref: ${{ github.sha }}
+          instructions: ${{ steps.instructions.outputs.path }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      # A draft is accepted when it carries at least one entry and nothing
+      # that would break the section it is spliced into: no `## ` heading and
+      # no `---` rule. Anything else is a warning and the cut falls back.
+      - name: Accept the draft
+        id: accept
+        env:
+          PREVIOUS_TAG: ${{ steps.previous.outputs.tag }}
+          DRAFT_OUTCOME: ${{ steps.draft.outcome }}
+          NOTES: ${{ steps.draft.outputs.release-notes }}
+          ENTRIES: ${{ steps.draft.outputs.release-notes-json }}
+          DRAFT: ${{ runner.temp }}/draft.md
+        run: |
+          set -euo pipefail
+          fallback() {
+            echo "::warning::$1; the cut uses the notes GitHub generates"
+            echo "drafted=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+          if [ -z "$PREVIOUS_TAG" ]; then
+            fallback "no previous tag to draft from"
+          fi
+          if [ "$DRAFT_OUTCOME" != success ]; then
+            fallback "the drafting step did not succeed ($DRAFT_OUTCOME)"
+          fi
+          if ! jq -e 'type == "array" and length > 0' <<< "$ENTRIES" > /dev/null 2>&1; then
+            fallback "no release notes were drafted"
+          fi
+          if grep -qE '^(## |---)' <<< "$NOTES"; then
+            fallback "the draft carries a section heading or a rule"
+          fi
+          printf '%s\n' "$NOTES" > "$DRAFT"
+          echo "drafted=true" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the draft
+        if: steps.accept.outputs.drafted == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-notes-draft
+          path: ${{ runner.temp }}/draft.md
+          if-no-files-found: error
+
   # Create a new release branch from main (cut a release)
   create:
     name: Create release
     if: github.ref_name == 'main'
+    needs: notes
     runs-on: ubuntu-latest
+    env:
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
     outputs:
       version: ${{ steps.release.outputs.version }}
+      drafted: ${{ needs.notes.outputs.drafted }}
     steps:
       - uses: actions/checkout@v7
 
@@ -67,11 +185,26 @@ jobs:
         id: release
         uses: ./.augentic/.github/actions/cargo-version
 
+      - name: Previous tag
+        id: previous
+        uses: ./.augentic/.github/actions/previous-tag
+        with:
+          version: ${{ steps.release.outputs.version }}
+
+      - name: Download the draft
+        if: needs.notes.outputs.drafted == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: release-notes-draft
+          path: ${{ runner.temp }}/draft
+
       - name: Update branch release notes
         uses: ./.augentic/.github/actions/release-notes
         with:
           release-type: major
           version: ${{ steps.release.outputs.version }}
+          previous-tag: ${{ steps.previous.outputs.tag }}
+          draft: ${{ runner.temp }}/draft/draft.md
 
       - name: Push to release branch
         env:
@@ -83,6 +216,8 @@ jobs:
     name: Next release
     runs-on: ubuntu-latest
     needs: create
+    env:
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
     steps:
       - uses: actions/checkout@v7
 
@@ -142,6 +277,7 @@ jobs:
 
             Maintainers should review the [release notes][RELEASES.md] for ${{ needs.create.outputs.version }}
             and make updates directly to the [release branch][branch].
+            ${{ needs.create.outputs.drafted == 'true' && 'The notes were drafted automatically, one entry per pull request: resolve every entry under `### Needs Review` and edit the notes on the release branch before Publish Release.' || 'No draft was produced (see the Draft release notes job), so the notes are the list GitHub generates: edit them on the release branch before Publish Release.' }}
 
             If any issues arise on the `main` branch before the release is made then the issue should be fixed
             on `main` and backported to the `release-${{ needs.create.outputs.version }}` branch.

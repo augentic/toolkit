@@ -1,6 +1,6 @@
 # Creates a patch version on a release branch.
-# The workflow bumps the patch version and updates the release notes for the
-# selected branch.
+# The workflow drafts the patch notes, bumps the patch version, and updates
+# the release notes for the selected branch.
 
 name: Create Patch
 
@@ -17,9 +17,7 @@ on:
 
 permissions:
   contents: write
-
-env:
-  CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+  copilot-requests: write
 
 jobs:
   skip:
@@ -31,12 +29,109 @@ jobs:
           echo "This workflow only runs on the 'release-*' branches"
           exit 1
 
+  # Draft the patch notes from the pull requests merged since the version
+  # the branch carries was tagged. See `release.yaml`: no secret, no write,
+  # and nothing here blocks the patch.
+  notes:
+    name: Draft release notes
+    if: startsWith(github.ref_name, 'release-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    permissions:
+      contents: read
+      pull-requests: read
+      copilot-requests: write
+    outputs:
+      drafted: ${{ steps.accept.outputs.drafted }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check out shared actions
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: .augentic
+          persist-credentials: false
+
+      - name: Current version
+        id: current
+        uses: ./.augentic/.github/actions/cargo-version
+
+      - name: Install Copilot CLI
+        id: cli
+        continue-on-error: true
+        run: npm install -g @github/copilot@1.0.91
+
+      - name: Release notes instructions
+        id: instructions
+        run: |
+          set -euo pipefail
+          path=.github/release-notes-instructions.md
+          if [ ! -f "$path" ]; then
+            path=.augentic/.github/release-notes-instructions.md
+          fi
+          echo "path=$path" >> "$GITHUB_OUTPUT"
+
+      - name: Draft
+        id: draft
+        if: steps.cli.outcome == 'success'
+        continue-on-error: true
+        uses: github/copilot-release-notes@29ba181a86b88f3acee62a03369033edfa982ab9 # v1.0.3
+        with:
+          base-ref: v${{ steps.current.outputs.version }}
+          head-ref: ${{ github.sha }}
+          instructions: ${{ steps.instructions.outputs.path }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: Accept the draft
+        id: accept
+        env:
+          DRAFT_OUTCOME: ${{ steps.draft.outcome }}
+          NOTES: ${{ steps.draft.outputs.release-notes }}
+          ENTRIES: ${{ steps.draft.outputs.release-notes-json }}
+          DRAFT: ${{ runner.temp }}/draft.md
+        run: |
+          set -euo pipefail
+          fallback() {
+            echo "::warning::$1; the patch uses the notes GitHub generates"
+            echo "drafted=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+          if [ "$DRAFT_OUTCOME" != success ]; then
+            fallback "the drafting step did not succeed ($DRAFT_OUTCOME)"
+          fi
+          if ! jq -e 'type == "array" and length > 0' <<< "$ENTRIES" > /dev/null 2>&1; then
+            fallback "no release notes were drafted"
+          fi
+          if grep -qE '^(## |---)' <<< "$NOTES"; then
+            fallback "the draft carries a section heading or a rule"
+          fi
+          printf '%s\n' "$NOTES" > "$DRAFT"
+          echo "drafted=true" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the draft
+        if: steps.accept.outputs.drafted == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-notes-draft
+          path: ${{ runner.temp }}/draft.md
+          if-no-files-found: error
+
   # Increment patch version and update RELEASES.md
   # Push back to the release-<version> branch for review and publishing
   patch:
     name: Patch release
     if: startsWith(github.ref_name, 'release-')
+    needs: notes
     runs-on: ubuntu-latest
+    env:
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
     steps:
       - uses: actions/checkout@v7
 
@@ -69,12 +164,27 @@ jobs:
       #     baseline-rev: ${{ github.ref_name }}
       #     release-type: patch
 
+      - name: Previous tag
+        id: previous
+        uses: ./.augentic/.github/actions/previous-tag
+        with:
+          version: ${{ steps.patch.outputs.version }}
+
+      - name: Download the draft
+        if: needs.notes.outputs.drafted == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: release-notes-draft
+          path: ${{ runner.temp }}/draft
+
       - name: Update release notes
         uses: ./.augentic/.github/actions/release-notes
         with:
           release-type: patch
           version: ${{ steps.patch.outputs.version }}
           previous-version: ${{ steps.patch.outputs.previous }}
+          previous-tag: ${{ steps.previous.outputs.tag }}
+          draft: ${{ runner.temp }}/draft/draft.md
 
       - name: Push changes
         env:

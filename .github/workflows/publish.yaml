@@ -64,6 +64,16 @@ jobs:
         id: cargo
         uses: ./.augentic/.github/actions/cargo-version
 
+      # `### Needs Review` is where the drafting puts an entry it is unsure
+      # of; it is resolved on the release branch and never reaches a release.
+      - name: Refuse unreviewed notes
+        run: |
+          set -euo pipefail
+          if line=$(grep -n -m 1 '^### Needs Review' RELEASES.md); then
+            echo "::error file=RELEASES.md,line=${line%%:*}::RELEASES.md carries a '### Needs Review' heading; resolve the entries beneath it on the release branch before publishing"
+            exit 1
+          fi
+
       - name: Date release notes
         env:
           VERSION: ${{ steps.cargo.outputs.version }}

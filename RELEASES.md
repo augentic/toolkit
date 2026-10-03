@@ -2,7 +2,35 @@
 
 ### Added
 
+- `release.yaml` and `patch.yaml` draft the new `RELEASES.md` section from
+  the pull requests merged since the previous tag, through
+  `github/copilot-release-notes` under the built-in token, in a `notes` job
+  that holds no secret and writes nothing. The draft is one entry per pull
+  request under `Added`, `Changed`, `Fixed`, `Removed`, or `Security`, as
+  the shared `.github/release-notes-instructions.md` directs (a repository's
+  own file at that path takes its place), with an entry the model is unsure
+  of under `### Needs Review` and its reason. When nothing is drafted the
+  section is the list GitHub generates, as before, with a warning on the run.
+- `publish.yaml` refuses to date and tag a `RELEASES.md` that still carries a
+  `### Needs Review` heading.
+- The `previous-tag` composite action: the highest semver tag strictly below
+  a version, shared by the drafting job and the generated-notes fallback.
+
 ### Changed
+
+- A caller of `release.yaml` or `patch.yaml` grants `copilot-requests: write`
+  under `permissions`; without it the drafting fails and the cut falls back
+  to the generated notes. The workflows' `CARGO_REGISTRY_TOKEN` is set on
+  the jobs that bump and push rather than on the workflow.
+- The `release-notes` composite action takes `previous-tag` and `draft`. With
+  a draft, a cut keeps the hand-written entries above the `---` rule, drops
+  a `### ` heading with nothing beneath it, and appends the draft; a patch
+  section is the draft in place of the generated list under `### Fixed`. The
+  `next` skeleton is `## <version>` and `Unreleased` with no headings, since
+  the headings come with the draft at the cut.
+- The "bump version" pull request says whether the notes on the release
+  branch were drafted or generated, and that anything under `### Needs
+  Review` is resolved on the release branch before Publish Release.
 
 ### Conventions
 

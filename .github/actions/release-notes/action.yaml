@@ -12,6 +12,18 @@ inputs:
       version being patched (used to re-title the previous notes).
       Required for 'next' and 'patch'.
     default: ""
+  previous-tag:
+    description: |
+      The highest tag below `version`, from the `previous-tag` action, or
+      empty when the repository has none. Bounds GitHub's generated notes
+      for 'major', 'minor', and 'patch'.
+    default: ""
+  draft:
+    description: |
+      Path to the drafted notes for `version`: categorised Markdown under
+      `### ` headings, with no `## ` heading and no `---` rule. The file may
+      be absent or empty; GitHub's generated notes are used in its place.
+    default: ""
   release-type:
     description: One of 'major', 'minor', 'patch', or 'next'.
     default: major
@@ -19,57 +31,30 @@ inputs:
 runs:
   using: composite
   steps:
-    # The highest semver tag strictly below `version`. This is correct on
-    # `main` (previous minor) and on a release branch (previous patch), even
-    # when newer minor releases have been tagged since the branch was cut.
-    - name: Get previous version
+    - name: Read the draft
       if: ${{ inputs.release-type != 'next' }}
-      id: previous
-      uses: actions/github-script@v9
+      id: draft
+      shell: bash
       env:
-        NEW_VERSION: ${{ inputs.version }}
-      with:
-        result-encoding: string
-        script: |
-          const parse = (name) => {
-            const match = /^v(\d+)\.(\d+)\.(\d+)$/.exec(name);
-            return match ? match.slice(1).map(Number) : null;
-          };
-          const compare = (a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
-
-          const target = parse(`v${process.env.NEW_VERSION}`);
-          if (!target) {
-            core.setFailed(`version '${process.env.NEW_VERSION}' is not MAJOR.MINOR.PATCH`);
-            return '';
-          }
-
-          const tags = await github.paginate(github.rest.repos.listTags, {
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            per_page: 100,
-          });
-
-          let previous = null;
-          for (const tag of tags) {
-            const parsed = parse(tag.name);
-            if (!parsed || compare(parsed, target) >= 0) continue;
-            if (!previous || compare(parsed, previous.parsed) > 0) {
-              previous = { name: tag.name, parsed };
-            }
-          }
-
-          core.info(`previous tag for v${process.env.NEW_VERSION}: ${previous?.name ?? '(none)'}`);
-          return previous?.name ?? '';
+        DRAFT: ${{ inputs.draft }}
+      run: |
+        set -euo pipefail
+        if [ -n "$DRAFT" ] && [ -s "$DRAFT" ]; then
+          echo "drafted=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "::warning::no drafted release notes; using the notes GitHub generates"
+          echo "drafted=false" >> "$GITHUB_OUTPUT"
+        fi
 
     # `target_commitish` pins the notes to the triggering commit; without it
     # GitHub compares against the default branch, which is wrong on release
     # branches.
     - name: Generate release notes
-      if: ${{ inputs.release-type != 'next' }}
+      if: ${{ inputs.release-type != 'next' && steps.draft.outputs.drafted != 'true' }}
       id: notes
       uses: actions/github-script@v9
       env:
-        PREVIOUS_TAG: ${{ steps.previous.outputs.result }}
+        PREVIOUS_TAG: ${{ inputs.previous-tag }}
         NEW_VERSION: ${{ inputs.version }}
       with:
         result-encoding: string
@@ -89,18 +74,34 @@ runs:
     # -------------------------------------------
     # Major/minor
     # -------------------------------------------
+    # The hand-written body above the `---` rule is kept as it is. With a
+    # draft, a `### ` heading with nothing beneath it (the skeleton's) is
+    # dropped before the draft is appended, since the draft brings its own.
     - name: Create RELEASES.md
       if: ${{ inputs.release-type == 'major' || inputs.release-type == 'minor' }}
       shell: bash
       env:
+        DRAFTED: ${{ steps.draft.outputs.drafted }}
+        DRAFT: ${{ inputs.draft }}
         NOTES: ${{ steps.notes.outputs.result }}
       run: |
         set -euo pipefail
         body=$(sed -n '/---/,$!p' RELEASES.md)
         archive=$(sed -n '/---/,$p' RELEASES.md)
+        if [ "$DRAFTED" = true ]; then
+          body=$(awk '
+            /^### / { pending = $0 "\n"; next }
+            /^## / { pending = ""; print; next }
+            /^[[:space:]]*$/ { if (pending != "") pending = pending $0 "\n"; else print; next }
+            { printf "%s", pending; pending = ""; print }
+          ' <<< "$body")
+          notes=$(cat "$DRAFT")
+        else
+          notes=$NOTES
+        fi
         {
           printf '%s\n\n' "$body"
-          printf '%s\n\n' "$NOTES"
+          printf '%s\n\n' "$notes"
           printf '%s\n' "$archive"
         } > RELEASES.md.new
         mv RELEASES.md.new RELEASES.md
@@ -110,11 +111,14 @@ runs:
     # -------------------------------------------
     # `cargo-version` has already rewritten line 1 to the patch version, so the
     # previous notes are re-titled with `previous-version` before being
-    # appended below the new section.
+    # appended below the new section. A draft carries its own headings; the
+    # generated list goes under `### Fixed`.
     - name: Patch RELEASES.md
       if: ${{ inputs.release-type == 'patch' }}
       shell: bash
       env:
+        DRAFTED: ${{ steps.draft.outputs.drafted }}
+        DRAFT: ${{ inputs.draft }}
         NOTES: ${{ steps.notes.outputs.result }}
         PREVIOUS_VERSION: ${{ inputs.previous-version }}
       run: |
@@ -127,8 +131,13 @@ runs:
         previous=$(tail -n +2 RELEASES.md | sed '/./,$!d')
         {
           printf '%s\n\n' "$title"
-          printf 'Unreleased\n\n### Fixed\n\n'
-          printf '%s\n\n' "$NOTES"
+          printf 'Unreleased\n\n'
+          if [ "$DRAFTED" = true ]; then
+            printf '%s\n\n' "$(cat "$DRAFT")"
+          else
+            printf '### Fixed\n\n'
+            printf '%s\n\n' "$NOTES"
+          fi
           printf -- '---\n\n'
           printf '## %s\n\n' "$PREVIOUS_VERSION"
           printf '%s\n' "$previous"
@@ -155,6 +164,8 @@ runs:
         version_x="${PREVIOUS_VERSION%.*}.x"
         sed -i "/ARCHIVE_START/a * [${version_x}](https://github.com/${REPOSITORY}/blob/release-${PREVIOUS_VERSION}/RELEASES.md)" RELEASES.md
 
+    # The headings come with the draft at the cut, so the skeleton carries
+    # none; an entry written by hand before then brings its own.
     - name: Create next release notes
       if: ${{ inputs.release-type == 'next' }}
       shell: bash
@@ -164,7 +175,7 @@ runs:
         archive=$(sed -n '/---/,$p' RELEASES.md)
         {
           printf '%s\n\n' "$title"
-          printf 'Unreleased\n\n### Added\n\n### Changed\n\n'
+          printf 'Unreleased\n\n'
           printf '%s\n' "$archive"
         } > RELEASES.md.new
         mv RELEASES.md.new RELEASES.md
