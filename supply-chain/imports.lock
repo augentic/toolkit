@@ -175,6 +175,8 @@ user-id = 6743
 user-login = "epage"
 user-name = "Ed Page"
 
+[audits.augentic.audits]
+
 [[audits.bytecode-alliance.audits.errno]]
 who = "Dan Gohman <dev@sunfishcode.online>"
 criteria = "safe-to-deploy"

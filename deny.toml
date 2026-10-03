@@ -12,7 +12,7 @@ targets = [
 feature-depth = 1
 
 [advisories]
-unmaintained = 'workspace'
+unmaintained = "workspace"
 
 [licenses]
 allow = [

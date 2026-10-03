@@ -1,14 +1,13 @@
 # Every file `conventions sync` manages in a consumer, by mode. A `source` is
-# a path under this directory; a `target` a path under the consumer root, with
-# `{{key}}` placeholders read from the consumer's conventions.toml (a
-# list-valued key makes one target per entry, none when the list is empty).
+# a path under this directory; a `target` a path under the consumer root.
 #
-# A block's name is its source path without the extension; a block-mode file
-# the consumer lacks is created as `preamble` plus the blocks.
+# A block's name is its source path under `conventions/`, extension included;
+# a block-mode file the consumer lacks is created as `preamble` plus the
+# blocks.
 
 # -------------------------------------
-# Whole files: written verbatim, under a managed header where the format takes
-# comments (`hash` for `#`, `html` for `<!-- -->`, `none`).
+# Whole files: written verbatim, under the managed notice where the format
+# takes comments (`hash` for `#`, `html` for `<!-- -->`, `none`).
 # -------------------------------------
 
 [[whole]]
@@ -52,12 +51,13 @@ target = "renovate.json"
 header = "none"
 
 # -------------------------------------
-# Marker blocks inside files the consumer owns.
+# Marker blocks inside files the consumer owns, from a `BEGIN Managed by
+# augentic/toolkit` line to its `END` line.
 # -------------------------------------
 
 [[block]]
 target = "AGENTS.md"
-preamble = "# {{name}} — Agent Instructions\n"
+preamble = "# Agent Instructions\n"
 sources = [
   "agents/git.md",
   "agents/code-style.md",
@@ -85,8 +85,10 @@ preamble = "version: 2\nupdates:\n"
 sources = ["dependabot/actions.yml"]
 
 # -------------------------------------
-# TOML table blocks: complete tables, or the leading keys of one table whose
-# remaining keys the consumer writes beneath the end marker.
+# TOML tables owned by key: every key a source sets is held at the source's
+# value, wherever the consumer's file keeps it; every other key of the file is
+# the consumer's. `retired` lists the dotted keys a source once set, removed
+# from the file when present.
 # -------------------------------------
 
 [[table]]
@@ -97,37 +99,10 @@ sources = ["lints/rust.toml", "lints/clippy.toml"]
 target = "deny.toml"
 sources = ["deny/advisories.toml", "deny/licenses.toml"]
 
-# `cargo vet` rewrites this file in its own layout and would drop the markers,
-# so the imports are held as keys alone.
 [[table]]
 target = "supply-chain/config.toml"
 sources = ["vet/imports.toml"]
-markers = false
 
 [[table]]
-target = "{{guest-clippy}}"
-sources = ["clippy/guest-deny-list.toml"]
-
-# -------------------------------------
-# Stubs rendered from a template and conventions.toml, managed whole.
-# -------------------------------------
-
-[[stub]]
-source = "workflows/ci.yaml"
-target = ".github/workflows/ci.yaml"
-
-[[stub]]
-source = "workflows/audit.yaml"
-target = ".github/workflows/audit.yaml"
-
-[[stub]]
-source = "workflows/patch.yaml"
-target = ".github/workflows/patch.yaml"
-
-[[stub]]
-source = "workflows/release.yaml"
-target = ".github/workflows/release.yaml"
-
-[[stub]]
-source = "rust-toolchain.toml"
 target = "rust-toolchain.toml"
+sources = ["rust-toolchain.toml"]

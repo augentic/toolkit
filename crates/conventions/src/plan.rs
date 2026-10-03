@@ -1,20 +1,21 @@
-use std::collections::BTreeSet;
 use std::path::Path;
 
 use anyhow::{Context as _, Result};
 use similar::TextDiff;
 
-use crate::config::Consumer;
-use crate::manifest::{Header, block_name};
+use crate::consumer::Consumer;
+use crate::manifest::block_name;
 use crate::marker::{self, Style};
 use crate::toolkit::Toolkit;
 use crate::{pin, rules, table, template};
 
-// One managed file: what the repository has and what the toolkit says.
+// One managed file: what the repository has, what the toolkit says, and the
+// notes to print beside it (the repository's own keys in a shared table).
 pub struct Managed {
     pub path: String,
     pub current: Option<String>,
     pub desired: String,
+    pub notes: Vec<String>,
 }
 
 impl Managed {
@@ -24,8 +25,8 @@ impl Managed {
 }
 
 // Every managed file resolved against the repository, plus the files that
-// could not be resolved and why: markers that cannot be relied on, a block
-// that leaves a TOML file invalid, a template that does not render.
+// could not be resolved and why: markers that cannot be relied on, a table the
+// file cannot hold.
 pub struct Plan {
     pub files: Vec<Managed>,
     pub problems: Vec<String>,
@@ -34,33 +35,28 @@ pub struct Plan {
 impl Plan {
     pub fn build(toolkit: &Toolkit, consumer: &Consumer) -> Result<Self> {
         let manifest = toolkit.manifest()?;
-        let values = consumer.values();
         let mut plan = Self {
             files: Vec::new(),
             problems: Vec::new(),
         };
-        let mut stubs = BTreeSet::new();
 
         for whole in &manifest.whole {
             let body = toolkit.read(&whole.source)?;
             let desired =
                 template::header(whole.header, &format!("conventions/{}", whole.source)) + &body;
-            plan.push(consumer, &whole.target, desired)?;
+            plan.push(consumer, &whole.target, desired, Vec::new())?;
         }
 
         for blocks in &manifest.block {
             let style = Style::of(Path::new(&blocks.target));
-            let mut text = match read(&consumer.root, &blocks.target)? {
-                Some(text) => text,
-                None => match &blocks.preamble {
-                    Some(preamble) => template::render(preamble, &values)?,
-                    None => String::new(),
-                },
-            };
+            let mut text = read(&consumer.root, &blocks.target)?
+                .or_else(|| blocks.preamble.clone())
+                .unwrap_or_default();
             let mut failed = None;
             for source in &blocks.sources {
                 let body = toolkit.read(source)?;
-                match marker::splice(&text, style, block_name(source), &body) {
+                let name = format!("conventions/{source}");
+                match marker::splice(&text, style, &name, block_name(source), &body) {
                     Ok(next) => text = next,
                     Err(error) => {
                         failed = Some(error);
@@ -70,74 +66,51 @@ impl Plan {
             }
             match failed {
                 Some(error) => plan.problems.push(format!("{}: {error:#}", blocks.target)),
-                None => plan.push(consumer, &blocks.target, text)?,
+                None => plan.push(consumer, &blocks.target, text, Vec::new())?,
             }
         }
 
         for tables in &manifest.table {
-            for target in values.targets(&tables.target)? {
-                let mut text = read(&consumer.root, &target)?.unwrap_or_default();
-                let mut failed = None;
-                for source in &tables.sources {
-                    let body = toolkit.read(source)?;
-                    let merged = if tables.markers {
-                        table::merge(&text, block_name(source), &body)
-                    } else {
-                        table::set(&text, &body)
-                    };
-                    match merged {
-                        Ok(next) => text = next,
-                        Err(error) => {
-                            failed = Some(error);
-                            break;
-                        }
-                    }
+            let bodies = tables
+                .sources
+                .iter()
+                .map(|source| toolkit.read(source))
+                .collect::<Result<Vec<_>>>()?;
+            let mut text = read(&consumer.root, &tables.target)?.unwrap_or_default();
+            match settle(&mut text, &bodies, &tables.retired) {
+                Ok(locals) => {
+                    let notes =
+                        locals.into_iter().map(|local| note(&tables.target, &local)).collect();
+                    plan.push(consumer, &tables.target, text, notes)?;
                 }
-                match failed {
-                    Some(error) => plan.problems.push(format!("{target}: {error:#}")),
-                    None => plan.push(consumer, &target, text)?,
-                }
+                Err(error) => plan.problems.push(format!("{}: {error:#}", tables.target)),
             }
         }
 
-        for stub in &manifest.stub {
-            let rendered = template::render(&toolkit.read(&stub.source)?, &values)
-                .with_context(|| format!("rendering conventions/{}", stub.source))?;
-            let from = format!("conventions/{} and {}", stub.source, crate::config::CONFIG);
-            plan.push(consumer, &stub.target, template::header(Header::Hash, &from) + &rendered)?;
-            stubs.insert(stub.target.clone());
-        }
-
-        // every other workflow, and each file the configuration names, carries
-        // the pin alone
-        let mut pinned: Vec<String> =
-            workflows(&consumer.root)?.into_iter().filter(|p| !stubs.contains(p)).collect();
-        pinned.extend(consumer.config.pinned.iter().cloned());
-        for path in pinned {
-            match read(&consumer.root, &path)? {
-                Some(current) => {
-                    let desired = pin::rewrite(&current, &consumer.pin);
-                    plan.files.push(Managed {
-                        path,
-                        current: Some(current),
-                        desired,
-                    });
-                }
-                None => plan
-                    .problems
-                    .push(format!("{path}: named by `pinned` but not in the repository")),
-            }
+        // every workflow is the repository's and carries the pin alone
+        for path in workflows(&consumer.root)? {
+            let Some(current) = read(&consumer.root, &path)? else { continue };
+            let desired = pin::rewrite(template::legacy_header(&current), &consumer.pin);
+            plan.files.push(Managed {
+                path,
+                current: Some(current),
+                desired,
+                notes: Vec::new(),
+            });
         }
 
         Ok(plan)
     }
 
-    fn push(&mut self, consumer: &Consumer, path: &str, desired: String) -> Result<()> {
+    fn push(
+        &mut self, consumer: &Consumer, path: &str, desired: String, notes: Vec<String>,
+    ) -> Result<()> {
         let current = read(&consumer.root, path)?;
         self.files.push(Managed {
             path: path.to_owned(),
             current,
             desired,
+            notes,
         });
         Ok(())
     }
@@ -154,6 +127,7 @@ impl Plan {
                 .with_context(|| format!("writing {}", path.display()))?;
             println!("{} {}", if file.current.is_some() { "wrote" } else { "created" }, file.path);
         }
+        self.print_notes();
         for problem in &self.problems {
             eprintln!("unresolved: {problem}");
         }
@@ -187,6 +161,7 @@ impl Plan {
             failures += 1;
             println!("rule: {failure}");
         }
+        self.print_notes();
 
         if failures == 0 {
             println!("conventions: {} managed files match", self.files.len());
@@ -198,6 +173,33 @@ impl Plan {
             false
         }
     }
+
+    fn print_notes(&self) {
+        for note in self.files.iter().flat_map(|file| &file.notes) {
+            println!("{note}");
+        }
+    }
+}
+
+// The text with every body's keys held and the retired paths gone, and the
+// repository's own keys in the tables the bodies set.
+fn settle(text: &mut String, bodies: &[String], retired: &[String]) -> Result<Vec<table::Local>> {
+    *text = template::legacy_header(text).to_owned();
+    for body in bodies {
+        *text = table::set(text, body)?;
+    }
+    *text = table::retire(text, retired)?;
+    let mut locals = Vec::new();
+    for body in bodies {
+        locals.extend(table::local(text, body)?);
+    }
+    Ok(locals)
+}
+
+fn note(target: &str, local: &table::Local) -> String {
+    let keys = local.keys.join(", ");
+    let at = local.header.as_ref().map_or(String::new(), |header| format!(" {header}"));
+    format!("{target}{at}: repository keys {keys}")
 }
 
 fn read(root: &Path, path: &str) -> Result<Option<String>> {
