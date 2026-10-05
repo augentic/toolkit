@@ -1793,6 +1793,27 @@ start = "2024-08-15"
 end = "2027-10-03"
 aggregated-from = "https://raw.githubusercontent.com/augentic/toolkit/main/supply-chain/audits.toml"
 
+[[trusted.libc]]
+criteria = "safe-to-deploy"
+trusted-publisher = "github:rust-lang/libc"
+start = "2026-10-02"
+end = "2027-10-02"
+aggregated-from = "https://raw.githubusercontent.com/augentic/emery-adapters/main/supply-chain/audits.toml"
+
+[[trusted.libc]]
+criteria = "safe-to-deploy"
+trusted-publisher = "github:rust-lang/libc"
+start = "2026-10-02"
+end = "2027-10-02"
+aggregated-from = "https://raw.githubusercontent.com/augentic/emery/main/supply-chain/audits.toml"
+
+[[trusted.libc]]
+criteria = "safe-to-deploy"
+trusted-publisher = "github:rust-lang/libc"
+start = "2026-10-02"
+end = "2027-10-03"
+aggregated-from = "https://raw.githubusercontent.com/augentic/omnia/main/supply-chain/audits.toml"
+
 [[trusted.libm]]
 criteria = "safe-to-deploy"
 user-id = 55123
