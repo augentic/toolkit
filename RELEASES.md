@@ -1,3 +1,13 @@
+## 0.5.1
+
+### Fixed
+
+- The `Deny` job of `ci.yaml` runs a prebuilt `cargo-deny` from GitHub
+  releases through `taiki-e/install-action`, as the other jobs install their
+  tools. `EmbarkStudios/cargo-deny-action` built its image from Docker Hub
+  on every run, anonymously, and the pull rate limit failed the job before
+  `cargo deny` ran.
+
 ## 0.5.0
 
 ### Removed

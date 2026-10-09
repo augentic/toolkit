@@ -38,18 +38,23 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # Lockfile-only (no rustc). Compile jobs wait so a known-bad crate
-  # cannot run build.rs / proc-macros before advisories fail.
+  # Lockfile-only (no compile). Compile jobs wait so a known-bad crate
+  # cannot run build.rs / proc-macros before advisories fail. cargo-deny
+  # is a prebuilt binary from GitHub releases: the Docker action pulls its
+  # base image from Docker Hub anonymously, which rate-limits the runners.
   deny:
     name: Deny
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-      - uses: EmbarkStudios/cargo-deny-action@v2
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
         with:
-          manifest-path: ${{ inputs.working-directory }}/Cargo.toml
-          arguments: --workspace --locked
+          tool: cargo-deny
+
+      - run: cargo deny --workspace --locked check
+        working-directory: ${{ inputs.working-directory }}
 
   clippy:
     name: Clippy
