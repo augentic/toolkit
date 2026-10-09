@@ -21,6 +21,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: Swatinem/rust-cache@v2
+      # audit-check runs whatever `cargo-audit` is on PATH and otherwise
+      # `cargo install`s it from source on every cache miss.
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
       # v2.0.0 still runs on Node 20 (deprecated); pin the default-branch
       # commit that moved to Node 24 until it is released.
       - uses: rustsec/audit-check@858dc40f52ca2b8570b7a997c1c4e35c6fc9a432 # v2.0.0 + Node 24

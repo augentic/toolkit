@@ -1,3 +1,16 @@
+## 0.5.1
+
+### Fixed
+
+- The `Deny` job of `ci.yaml` runs a prebuilt `cargo-deny` from GitHub
+  releases through `taiki-e/install-action`, as the other jobs install their
+  tools. `EmbarkStudios/cargo-deny-action` built its image from Docker Hub
+  on every run, anonymously, and the pull rate limit failed the job before
+  `cargo deny` ran.
+- The `Security audit` job of `audit.yaml` installs a prebuilt `cargo-audit`
+  before `rustsec/audit-check` runs, which otherwise `cargo install`s it from
+  source whenever its own cache misses.
+
 ## 0.5.0
 
 ### Removed
