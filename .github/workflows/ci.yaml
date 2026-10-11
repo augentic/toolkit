@@ -67,29 +67,52 @@ jobs:
         with:
           components: clippy
           targets: ${{ inputs.targets }}
+
+      # The each-feature passes lint single-feature configurations, so their
+      # scope is the members that declare a feature. A member without one has
+      # a single configuration, which the all-features pass lints; cargo-hack
+      # would still run clippy for it under its own dependency resolution and
+      # re-check the shared dependency graph once per member. Detect via
+      # cargo metadata: no throwaway compile, no dependency fetch.
+      - id: features
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          packages=$(cargo metadata --format-version 1 --no-deps \
+            | jq -r '[.packages[] | select((.features | length) > 0) | .name] | join(" ")')
+          echo "packages=$packages" >> "$GITHUB_OUTPUT"
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: ${{ inputs.working-directory }}
           cache-on-failure: true
-      - uses: taiki-e/install-action@v2
+      - if: steps.features.outputs.packages != ''
+        uses: taiki-e/install-action@v2
         with:
           tool: cargo-hack
 
       - run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
         working-directory: ${{ inputs.working-directory }}
-        
-      - run: cargo hack clippy --locked --workspace --each-feature --exclude-all-features -- -D warnings
+
+      - if: steps.features.outputs.packages != ''
         working-directory: ${{ inputs.working-directory }}
-        
+        env:
+          FEATURE_PACKAGES: ${{ steps.features.outputs.packages }}
+        run: |
+          scope=()
+          read -ra packages <<< "$FEATURE_PACKAGES"
+          for package in "${packages[@]}"; do scope+=(-p "$package"); done
+          cargo hack clippy --locked "${scope[@]}" --each-feature --exclude-all-features -- -D warnings
+
       # Host passes skip `cfg(target_arch = "wasm32")` code, so repeat per
       # target over lib/bins/examples (tests are host-only). The each-feature
-      # pass omits `--lib`/`--examples`: cargo-hack forwards them verbatim to
-      # packages lacking them. Mirrors `lint-wasm` in mise/rust.toml.
+      # pass takes the members in scope that declare a feature and omits
+      # `--lib`/`--examples`: cargo-hack forwards them verbatim to packages
+      # lacking them. Mirrors `lint-wasm` in mise/rust.toml.
       - if: inputs.targets != ''
         working-directory: ${{ inputs.working-directory }}
         env:
           TARGETS: ${{ inputs.targets }}
           WASM_PACKAGES: ${{ inputs.wasm-packages }}
+          FEATURE_PACKAGES: ${{ steps.features.outputs.packages }}
         run: |
           scope=(--workspace)
           if [ -n "$WASM_PACKAGES" ]; then
@@ -97,6 +120,13 @@ jobs:
             read -ra packages <<< "$WASM_PACKAGES"
             for package in "${packages[@]}"; do scope+=(-p "$package"); done
           fi
+          hack_scope=()
+          read -ra feature_packages <<< "$FEATURE_PACKAGES"
+          for package in "${feature_packages[@]}"; do
+            if [ -z "$WASM_PACKAGES" ] || [[ " $WASM_PACKAGES " == *" $package "* ]]; then
+              hack_scope+=(-p "$package")
+            fi
+          done
           IFS=',' read -ra targets <<< "$TARGETS"
           for target in "${targets[@]}"; do
             target="${target// /}"
@@ -104,8 +134,9 @@ jobs:
             echo "::group::cargo clippy ${scope[*]} --lib --bins --examples --target $target"
             cargo clippy --locked "${scope[@]}" --lib --bins --examples --all-features --target "$target" -- -D warnings
             echo "::endgroup::"
-            echo "::group::cargo hack clippy ${scope[*]} --each-feature --target $target"
-            cargo hack clippy --locked "${scope[@]}" --each-feature --exclude-all-features --target "$target" -- -D warnings
+            [ ${#hack_scope[@]} -gt 0 ] || continue
+            echo "::group::cargo hack clippy ${hack_scope[*]} --each-feature --target $target"
+            cargo hack clippy --locked "${hack_scope[@]}" --each-feature --exclude-all-features --target "$target" -- -D warnings
             echo "::endgroup::"
           done
 

@@ -109,10 +109,11 @@ The pass has one shape everywhere:
   crates (wasmtime, tokio, ...) share the workspace with guest components.
 - **Targets** are `--lib --bins --examples` with `--all-features`, then
   `cargo hack clippy --each-feature --exclude-all-features` over cargo's
-  default targets (lib + bins). **Tests and benches are never built for
-  wasm32**: integration tests and their dev-dependencies are host-only in
-  most workspaces, and cargo-hack forwards `--lib`/`--examples` verbatim,
-  which errors on packages without those targets.
+  default targets (lib + bins) for the members in scope that declare a
+  feature. **Tests and benches are never built for wasm32**: integration
+  tests and their dev-dependencies are host-only in most workspaces, and
+  cargo-hack forwards `--lib`/`--examples` verbatim, which errors on packages
+  without those targets.
 - **Convention**: any bin or example in the wasm32 scope that is host-only
   must be cfg-gated to an empty `main` on wasm32, e.g.
 
@@ -147,8 +148,8 @@ hand. When you change one, change the other in the same PR.
 | `ci.yaml` job | `mise/rust.toml` task | Command |
 |---|---|---|
 | Format | `fmt-check` | `cargo +nightly fmt --all --check` |
-| Clippy (host steps) | `lint-host` | `cargo clippy --locked --workspace --all-targets --all-features`, `cargo hack clippy --locked --workspace --each-feature --exclude-all-features` |
-| Clippy (per-target step) | `lint-wasm` | `cargo clippy --locked <scope> --lib --bins --examples --all-features --target wasm32-wasip2`, `cargo hack clippy --locked <scope> --each-feature --exclude-all-features --target wasm32-wasip2` |
+| Clippy (host steps) | `lint-host` | `cargo clippy --locked --workspace --all-targets --all-features`, `cargo hack clippy --locked -p <members with features> --each-feature --exclude-all-features` |
+| Clippy (per-target step) | `lint-wasm` | `cargo clippy --locked <scope> --lib --bins --examples --all-features --target wasm32-wasip2`, `cargo hack clippy --locked -p <members in scope with features> --each-feature --exclude-all-features --target wasm32-wasip2` |
 | Test | `test` | `cargo nextest run --locked --workspace --all-features --no-tests=pass` |
 | Test docs | `test-docs` | `cargo test --doc --locked --all-features --workspace`, when the workspace has a library target |
 | Docs | `docs` | `cargo doc --no-deps --workspace --all-features --locked` with `RUSTDOCFLAGS=-Dwarnings` |
@@ -161,6 +162,12 @@ order; `lint` runs `lint-host` then `lint-wasm`. Tasks with no CI job
 (`audit`, `outdated`, `deps`, `fmt`, `vet-regen`, `cov`, `publish`, `miri`,
 `clean`, `sweep`) are local helpers; `audit` and `outdated` correspond to the
 scheduled `audit.yaml` workflow instead.
+
+The `cargo hack clippy --each-feature` passes lint single-feature
+configurations, so both run over the members that declare a feature, read
+from `cargo metadata`, and a workspace without one skips them. That each
+member also builds on its own dependency declarations is `cargo publish`'s
+check: `crates.yaml` at release time, `make publish` as a dry run before it.
 
 ## Supply chain
 

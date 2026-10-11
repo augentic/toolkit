@@ -1,3 +1,14 @@
+## 0.6.0
+
+### Changed
+
+- The `Clippy` job of `ci.yaml` and the `lint-host` / `lint-wasm` tasks run
+  `cargo hack clippy --each-feature` only over the workspace members that
+  declare a feature, read from `cargo metadata`; a workspace without one
+  skips the pass. A member without a feature is linted by the all-features
+  pass alone, and that it builds on its own dependency declarations is
+  `cargo publish`'s check, in `crates.yaml` and `make publish`.
+
 ## 0.5.1
 
 ### Fixed
