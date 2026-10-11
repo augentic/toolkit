@@ -27,8 +27,8 @@ run = [
   { task = "deps" },
 ]
 
-# Exactly the jobs of `.github/workflows/ci.yaml`, one task per job (see the
-# "Mirror" table in README.md). Advisory extras live in `check`.
+# Exactly the cargo steps of `.github/workflows/ci.yaml`, in job order (see
+# the "Mirror" table in README.md). Advisory extras live in `check`.
 [ci]
 description = "Everything CI runs, in order"
 run = [
@@ -69,22 +69,43 @@ description = "Fail if any crate is not formatted (nightly rustfmt, mirrors CI)"
 run = "cargo +nightly fmt --all --check"
 
 # Lint every line of code: natively first (all targets with everything on,
-# then each crate in each single-feature configuration), then the same two
-# passes for `wasm32-wasip2` over lib + bins + examples only. `run` keeps the
-# order so host errors surface before the slower cross-target pass.
+# then each member that declares a feature in each single-feature
+# configuration), then the same two passes for `wasm32-wasip2` over lib +
+# bins + examples only. `run` keeps the order so host errors surface before
+# the slower cross-target pass.
+#
+# A member without a feature has a single configuration, which the
+# all-features pass lints; cargo-hack would still run clippy for it under its
+# own dependency resolution and re-check the shared dependency graph once per
+# member. Mirrors the `features` step of `.github/workflows/ci.yaml`.
 [lint]
 description = "Clippy with -D warnings: host (lint-host) then wasm32-wasip2 (lint-wasm)"
 env = { RUSTFLAGS = "-Dwarnings" }
 run = [{ task = "lint-host" }, { task = "lint-wasm" }]
 
+# Both lint scripts test an array for emptiness with `${arr[*]:-}`: mise
+# renders a task script as a Tera template, where the `{#` of `${#arr[@]}`
+# opens a comment.
 [lint-host]
 description = "Clippy natively: all targets with all features, then each feature"
 depends = ["install hack"]
+tools = { jq = "1.8" }
 env = { RUSTFLAGS = "-Dwarnings" }
-run = [
-  "cargo clippy --locked --workspace --all-targets --all-features -- -D warnings",
-  "cargo hack clippy --locked --workspace --each-feature --exclude-all-features -- -D warnings",
-]
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+scope=()
+for p in $(cargo metadata --format-version 1 --no-deps \
+  | jq -r '.packages[] | select((.features | length) > 0) | .name'); do
+  scope+=(-p "$p")
+done
+if [ -n "${scope[*]:-}" ]; then
+  cargo hack clippy --locked "${scope[@]}" --each-feature --exclude-all-features -- -D warnings
+else
+  echo "no workspace member declares a feature; nothing for the each-feature pass"
+fi
+'''
 
 # The wasm32 pass never builds tests or benches: integration tests and their
 # dev-dependencies are host-only in most workspaces. Any bin or example inside
@@ -94,6 +115,7 @@ run = [
 [lint-wasm]
 description = "Clippy for wasm32-wasip2: lib, bins and examples (WASM32_PACKAGES narrows the workspace)"
 depends = ["install hack"]
+tools = { jq = "1.8" }
 env = { RUSTFLAGS = "-Dwarnings" }
 run = '''
 #!/usr/bin/env bash
@@ -102,8 +124,17 @@ scope=(--workspace)
 if [ -n "${WASM32_PACKAGES:-}" ]; then
   scope=(); for p in $WASM32_PACKAGES; do scope+=(-p "$p"); done
 fi
+hack_scope=()
+for p in $(cargo metadata --format-version 1 --no-deps \
+  | jq -r '.packages[] | select((.features | length) > 0) | .name'); do
+  if [ -z "${WASM32_PACKAGES:-}" ] || [[ " $WASM32_PACKAGES " == *" $p "* ]]; then
+    hack_scope+=(-p "$p")
+  fi
+done
 cargo clippy --locked "${scope[@]}" --lib --bins --examples --all-features --target wasm32-wasip2 -- -D warnings
-cargo hack clippy --locked "${scope[@]}" --each-feature --exclude-all-features --target wasm32-wasip2 -- -D warnings
+if [ -n "${hack_scope[*]:-}" ]; then
+  cargo hack clippy --locked "${hack_scope[@]}" --each-feature --exclude-all-features --target wasm32-wasip2 -- -D warnings
+fi
 '''
 
 [outdated]
@@ -111,8 +142,8 @@ description = "Fail on outdated direct dependencies (OUTDATED_IGNORE skips crate
 depends = ["install outdated"]
 run = 'cargo outdated --workspace --exit-code 1 --depth 1 ${OUTDATED_IGNORE:+--ignore "$OUTDATED_IGNORE"}'
 
-# Mirrors the CI `test` job: one feature-unified build and one nextest run.
-# Per-feature compile coverage is `lint`'s job.
+# Mirrors the nextest step of the CI `test` job: one feature-unified build
+# and one nextest run. Per-feature compile coverage is `lint`'s job.
 [test]
 description = "nextest across the workspace with all features (includes the examples gate)"
 depends = ["install nextest"]
@@ -124,8 +155,9 @@ description = "Build rustdoc for the workspace, failing on warnings"
 env = { RUSTFLAGS = "-Dwarnings", RUSTDOCFLAGS = "-Dwarnings" }
 run = "cargo doc --no-deps --workspace --all-features --locked"
 
-# Mirrors the CI `test-doc` job, lib detection included: `cargo test --doc`
-# errors on a workspace with no library target instead of testing nothing.
+# Mirrors the doc step of the CI `test` job, lib detection included: `cargo
+# test --doc` errors on a workspace with no library target instead of testing
+# nothing. Runs after `test` so the build it needs is already fresh.
 [test-docs]
 description = "Run doc tests (nothing to run in a workspace without a library target)"
 env = { RUSTFLAGS = "-Dwarnings" }
