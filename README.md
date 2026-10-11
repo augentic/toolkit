@@ -150,18 +150,19 @@ hand. When you change one, change the other in the same PR.
 | Format | `fmt-check` | `cargo +nightly fmt --all --check` |
 | Clippy (host steps) | `lint-host` | `cargo clippy --locked --workspace --all-targets --all-features`, `cargo hack clippy --locked -p <members with features> --each-feature --exclude-all-features` |
 | Clippy (per-target step) | `lint-wasm` | `cargo clippy --locked <scope> --lib --bins --examples --all-features --target wasm32-wasip2`, `cargo hack clippy --locked -p <members in scope with features> --each-feature --exclude-all-features --target wasm32-wasip2` |
-| Test | `test` | `cargo nextest run --locked --workspace --all-features --no-tests=pass` |
-| Test docs | `test-docs` | `cargo test --doc --locked --all-features --workspace`, when the workspace has a library target |
+| Test (nextest step) | `test` | `cargo nextest run --locked --workspace --all-features --no-tests=pass` |
+| Test (doc step) | `test-docs` | `cargo test --doc --locked --all-features --workspace`, when the workspace has a library target |
 | Docs | `docs` | `cargo doc --no-deps --workspace --all-features --locked` with `RUSTDOCFLAGS=-Dwarnings` |
 | Vet | `vet` | `cargo vet --locked` |
 | Deny | `deny` | `cargo deny --workspace check` |
 
 All clippy/test/doc steps run with `RUSTFLAGS=-Dwarnings` (workflow-global
 `env`; per-task `env` in mise). `mise run ci` runs the tasks in the table
-order; `lint` runs `lint-host` then `lint-wasm`. Tasks with no CI job
-(`audit`, `outdated`, `deps`, `fmt`, `vet-regen`, `cov`, `publish`, `miri`,
-`clean`, `sweep`) are local helpers; `audit` and `outdated` correspond to the
-scheduled `audit.yaml` workflow instead.
+order; `lint` runs `lint-host` then `lint-wasm`, and `test-docs` follows
+`test` so the doc tests reuse its build, as the `Test` job does. Tasks with
+no CI job (`audit`, `outdated`, `deps`, `fmt`, `vet-regen`, `cov`, `publish`,
+`miri`, `clean`, `sweep`) are local helpers; `audit` and `outdated`
+correspond to the scheduled `audit.yaml` workflow instead.
 
 The `cargo hack clippy --each-feature` passes lint single-feature
 configurations, so both run over the members that declare a feature, read

@@ -179,25 +179,13 @@ jobs:
       - run: cargo nextest run --locked --workspace --all-features --no-tests=pass
         working-directory: ${{ inputs.working-directory }}
 
-  test-doc:
-    name: Test docs
-    needs: deny
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ inputs.targets }}
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: ${{ inputs.working-directory }}
-          cache-on-failure: true
+      # Doc tests follow in the same target directory, where that build has
+      # left every dependency and library fresh; a job of their own repeated
+      # the whole compile to run them. Detect a lib target via cargo metadata
+      # (`cargo test --doc` errors on a workspace without one): no throwaway
+      # compile, no reliance on cargo's stderr wording.
       - id: lib
         working-directory: ${{ inputs.working-directory }}
-
-        # Detect a lib target via cargo metadata: no throwaway compile, no
-        # reliance on cargo's stderr wording.
         run: |
           has_lib=$(cargo metadata --format-version 1 --no-deps \
             | jq '[.packages[].targets[].kind[]

@@ -8,6 +8,10 @@
   skips the pass. A member without a feature is linted by the all-features
   pass alone, and that it builds on its own dependency declarations is
   `cargo publish`'s check, in `crates.yaml` and `make publish`.
+- The `Test` job of `ci.yaml` runs `cargo test --doc` after nextest, in the
+  target directory that build leaves fresh; the `Test docs` job, which
+  repeated the whole compile to run them, is gone. A ruleset that requires
+  the `ci / Test docs` check must drop it.
 
 ## 0.5.1
 

@@ -27,8 +27,8 @@ run = [
   { task = "deps" },
 ]
 
-# Exactly the jobs of `.github/workflows/ci.yaml`, one task per job (see the
-# "Mirror" table in README.md). Advisory extras live in `check`.
+# Exactly the cargo steps of `.github/workflows/ci.yaml`, in job order (see
+# the "Mirror" table in README.md). Advisory extras live in `check`.
 [ci]
 description = "Everything CI runs, in order"
 run = [
@@ -142,8 +142,8 @@ description = "Fail on outdated direct dependencies (OUTDATED_IGNORE skips crate
 depends = ["install outdated"]
 run = 'cargo outdated --workspace --exit-code 1 --depth 1 ${OUTDATED_IGNORE:+--ignore "$OUTDATED_IGNORE"}'
 
-# Mirrors the CI `test` job: one feature-unified build and one nextest run.
-# Per-feature compile coverage is `lint`'s job.
+# Mirrors the nextest step of the CI `test` job: one feature-unified build
+# and one nextest run. Per-feature compile coverage is `lint`'s job.
 [test]
 description = "nextest across the workspace with all features (includes the examples gate)"
 depends = ["install nextest"]
@@ -155,8 +155,9 @@ description = "Build rustdoc for the workspace, failing on warnings"
 env = { RUSTFLAGS = "-Dwarnings", RUSTDOCFLAGS = "-Dwarnings" }
 run = "cargo doc --no-deps --workspace --all-features --locked"
 
-# Mirrors the CI `test-doc` job, lib detection included: `cargo test --doc`
-# errors on a workspace with no library target instead of testing nothing.
+# Mirrors the doc step of the CI `test` job, lib detection included: `cargo
+# test --doc` errors on a workspace with no library target instead of testing
+# nothing. Runs after `test` so the build it needs is already fresh.
 [test-docs]
 description = "Run doc tests (nothing to run in a workspace without a library target)"
 env = { RUSTFLAGS = "-Dwarnings" }
