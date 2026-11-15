@@ -5,7 +5,7 @@
 #
 # Consumer knobs, set under `[env]` in the consuming `mise.toml`, each the
 # repository's own value for what its caller workflow passes as an input:
-#   WASM32_PACKAGES  space-separated workspace members linted for wasm32-wasip2
+#   WASM32_PACKAGES  space-separated workspace members linted for wasm32-wasip3
 #                    by `lint-wasm`; unset = whole workspace. Mirrors the
 #                    `wasm-packages` input of `.github/workflows/ci.yaml`.
 #   OUTDATED_IGNORE  comma-separated crates `outdated` ignores. Mirrors the
@@ -70,7 +70,7 @@ run = "cargo +nightly fmt --all --check"
 
 # Lint every line of code: natively first (all targets with everything on,
 # then each member that declares a feature in each single-feature
-# configuration), then the same two passes for `wasm32-wasip2` over lib +
+# configuration), then the same two passes for `wasm32-wasip3` over lib +
 # bins + examples only. `run` keeps the order so host errors surface before
 # the slower cross-target pass.
 #
@@ -79,7 +79,7 @@ run = "cargo +nightly fmt --all --check"
 # own dependency resolution and re-check the shared dependency graph once per
 # member. Mirrors the `features` step of `.github/workflows/ci.yaml`.
 [lint]
-description = "Clippy with -D warnings: host (lint-host) then wasm32-wasip2 (lint-wasm)"
+description = "Clippy with -D warnings: host (lint-host) then wasm32-wasip3 (lint-wasm)"
 env = { RUSTFLAGS = "-Dwarnings" }
 run = [{ task = "lint-host" }, { task = "lint-wasm" }]
 
@@ -113,7 +113,7 @@ fi
 # The each-feature pass uses cargo's default targets (lib + bins) because
 # cargo-hack forwards `--lib`/`--examples` verbatim to packages without them.
 [lint-wasm]
-description = "Clippy for wasm32-wasip2: lib, bins and examples (WASM32_PACKAGES narrows the workspace)"
+description = "Clippy for wasm32-wasip3: lib, bins and examples (WASM32_PACKAGES narrows the workspace)"
 depends = ["install hack"]
 tools = { jq = "1.8" }
 env = { RUSTFLAGS = "-Dwarnings" }
@@ -131,9 +131,9 @@ for p in $(cargo metadata --format-version 1 --no-deps \
     hack_scope+=(-p "$p")
   fi
 done
-cargo clippy --locked "${scope[@]}" --lib --bins --examples --all-features --target wasm32-wasip2 -- -D warnings
+cargo clippy --locked "${scope[@]}" --lib --bins --examples --all-features --target wasm32-wasip3 -- -D warnings
 if [ -n "${hack_scope[*]:-}" ]; then
-  cargo hack clippy --locked "${hack_scope[@]}" --each-feature --exclude-all-features --target wasm32-wasip2 -- -D warnings
+  cargo hack clippy --locked "${hack_scope[@]}" --each-feature --exclude-all-features --target wasm32-wasip3 -- -D warnings
 fi
 '''
 

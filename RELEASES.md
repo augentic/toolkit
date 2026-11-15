@@ -1,3 +1,14 @@
+## 0.7.0
+
+### Changed
+
+- `lint-wasm` and `wasm.yaml` build for `wasm32-wasip3`, the WASI 0.3
+  target that Rust 1.100 promotes to Tier 2, in place of `wasm32-wasip2`.
+  A consumer adds `wasm32-wasip3` to the `targets` of its
+  `rust-toolchain.toml` and passes `targets: wasm32-wasip3` to `ci.yaml`.
+  `wasm.yaml` uploads the component from `target/wasm32-wasip3/release`. A
+  workspace that still builds for `wasm32-wasip2` stays on `v0.6.0`.
+
 ## 0.6.0
 
 ### Changed

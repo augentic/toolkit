@@ -21,13 +21,13 @@ and bumps them together:
 ```yaml
 jobs:
   ci:
-    uses: augentic/toolkit/.github/workflows/ci.yaml@v0.3.0
+    uses: augentic/toolkit/.github/workflows/ci.yaml@v0.7.0
 ```
 
 ```toml
 # mise.toml
 [task_config]
-includes = ["git::https://github.com/augentic/toolkit.git//mise/rust.toml?ref=v0.3.0"]
+includes = ["git::https://github.com/augentic/toolkit.git//mise/rust.toml?ref=v0.7.0"]
 ```
 
 Because `release.yaml`, `publish.yaml` and `patch.yaml` resolve their
@@ -47,10 +47,10 @@ A Rust repository adopts the shared tasks and CI with its `mise.toml`, a
 # mise.toml — the one pin, plus the knobs the shared tasks read and any
 # repository-specific tasks (a local task shadows a shared one of the same name)
 [task_config]
-includes = ["git::https://github.com/augentic/toolkit.git//mise/rust.toml?ref=v0.4.0"]
+includes = ["git::https://github.com/augentic/toolkit.git//mise/rust.toml?ref=v0.7.0"]
 
 [env]
-# Space-separated workspace members `lint-wasm` clippies for wasm32-wasip2.
+# Space-separated workspace members `lint-wasm` clippies for wasm32-wasip3.
 # Unset = whole workspace. The value `ci.yaml` passes as `wasm-packages`.
 WASM32_PACKAGES = "guest-crate examples"
 # Comma-separated crates `outdated` ignores. The value `audit.yaml` passes as
@@ -84,10 +84,10 @@ on:
   pull_request:
 jobs:
   ci:
-    uses: augentic/toolkit/.github/workflows/ci.yaml@v0.4.0
+    uses: augentic/toolkit/.github/workflows/ci.yaml@v0.7.0
     secrets: inherit
     with:
-      targets: wasm32-wasip2
+      targets: wasm32-wasip3
       wasm-packages: guest-crate examples
 ```
 
@@ -100,7 +100,7 @@ place.
 ### The wasm32 lint pass
 
 The host clippy passes never compile code behind
-`cfg(target_arch = "wasm32")`, so when `targets` includes `wasm32-wasip2`
+`cfg(target_arch = "wasm32")`, so when `targets` includes `wasm32-wasip3`
 (workflow) or `lint-wasm` runs (mise) clippy runs again for that target.
 The pass has one shape everywhere:
 
@@ -118,10 +118,11 @@ The pass has one shape everywhere:
   must be cfg-gated to an empty `main` on wasm32, e.g.
 
   ```rust
-  cfg_if::cfg_if! {
-      if #[cfg(not(target_arch = "wasm32"))] {
+  cfg_select! {
+      not(target_arch = "wasm32") => {
           // host-only imports and `main`
-      } else {
+      }
+      _ => {
           fn main() {}
       }
   }
@@ -136,7 +137,7 @@ A workspace with no wasm32 target shadows `lint-wasm` with a local no-op task:
 
 ```toml
 [tasks.lint-wasm]
-description = "Nothing to lint for wasm32-wasip2 in this workspace"
+description = "Nothing to lint for wasm32-wasip3 in this workspace"
 run = "true"
 ```
 
@@ -149,7 +150,7 @@ hand. When you change one, change the other in the same PR.
 |---|---|---|
 | Format | `fmt-check` | `cargo +nightly fmt --all --check` |
 | Clippy (host steps) | `lint-host` | `cargo clippy --locked --workspace --all-targets --all-features`, `cargo hack clippy --locked -p <members with features> --each-feature --exclude-all-features` |
-| Clippy (per-target step) | `lint-wasm` | `cargo clippy --locked <scope> --lib --bins --examples --all-features --target wasm32-wasip2`, `cargo hack clippy --locked -p <members in scope with features> --each-feature --exclude-all-features --target wasm32-wasip2` |
+| Clippy (per-target step) | `lint-wasm` | `cargo clippy --locked <scope> --lib --bins --examples --all-features --target wasm32-wasip3`, `cargo hack clippy --locked -p <members in scope with features> --each-feature --exclude-all-features --target wasm32-wasip3` |
 | Test (nextest step) | `test` | `cargo nextest run --locked --workspace --all-features --no-tests=pass` |
 | Test (doc step) | `test-docs` | `cargo test --doc --locked --all-features --workspace`, when the workspace has a library target |
 | Docs | `docs` | `cargo doc --no-deps --workspace --all-features --locked` with `RUSTDOCFLAGS=-Dwarnings` |

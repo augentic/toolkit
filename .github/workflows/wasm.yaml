@@ -48,11 +48,11 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: wasm32-wasip2
+          targets: wasm32-wasip3
 
       - uses: Swatinem/rust-cache@v2
         with:
-          key: wasm32-wasip2-${{ inputs.package }}
+          key: wasm32-wasip3-${{ inputs.package }}
 
       - name: Resolve names
         env:
@@ -69,7 +69,7 @@ jobs:
       - name: Build wasm component
         env:
           PACKAGE: ${{ inputs.package }}
-        run: cargo build --package "$PACKAGE" --release --target wasm32-wasip2 --locked
+        run: cargo build --package "$PACKAGE" --release --target wasm32-wasip3 --locked
 
       - name: Azure login
         uses: azure/login@v3
@@ -85,7 +85,7 @@ jobs:
           az storage file upload \
             --account-name "$STORAGE_ACCOUNT" \
             --share-name wasm \
-            --source "./target/wasm32-wasip2/release/${WASM_FILE}.wasm" \
+            --source "./target/wasm32-wasip3/release/${WASM_FILE}.wasm" \
             --path "${APP_NAME}.wasm"
 
       - name: Restart Container App
