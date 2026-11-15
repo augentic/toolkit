@@ -12,7 +12,7 @@ on:
         default: "."
       targets:
         description: >-
-          Comma-separated rustup targets to install (e.g. wasm32-wasip2).
+          Comma-separated rustup targets to install (e.g. wasm32-wasip3).
           Clippy also lints lib/bins/examples once per target.
         type: string
         default: ""
